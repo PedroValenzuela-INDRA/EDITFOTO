@@ -25,7 +25,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
-from . import color, config, imagen, pipeline
+from . import color, config, imagen, modelos, pipeline
 
 TIPOS_PINCEL = ("borrar", "proteger", "sumar", "restar")
 
@@ -200,7 +200,7 @@ class Proyecto:
                 f.version += 1
             except Exception as e:
                 traceback.print_exc()
-                f.estado, f.error = "error", f"{type(e).__name__}: {e}"
+                f.estado, f.error = "error", modelos.texto_error(e)
             self._guardar_estado(f)
             return f
 
@@ -296,7 +296,7 @@ class Proyecto:
             except Exception as e:
                 traceback.print_exc()
                 f = self.fotos[i]
-                f.estado, f.error = "error", f"{type(e).__name__}: {e}"
+                f.estado, f.error = "error", modelos.texto_error(e)
                 self._guardar_estado(f)
             hechas += 1
         for i in ids:

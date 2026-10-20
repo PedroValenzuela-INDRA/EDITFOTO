@@ -115,7 +115,19 @@ def main(argv=None):
     s.set_defaults(func=cmd_info)
 
     a = ap.parse_args(argv)
-    a.func(a)
+    try:
+        a.func(a)
+    except KeyboardInterrupt:
+        sys.exit(130)
+    except Exception as e:
+        import traceback
+
+        from .modelos import texto_error
+
+        traceback.print_exc()
+        print(f"\nERROR: {texto_error(e)}", file=sys.stderr)
+        print("Copia todo el texto de esta ventana y pasaselo a Claude.", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

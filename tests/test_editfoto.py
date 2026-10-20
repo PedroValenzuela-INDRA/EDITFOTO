@@ -242,3 +242,15 @@ def test_si_la_grafica_falla_se_repite_en_cpu(monkeypatch):
     assert "birefnet" in modelos._solo_cpu
     # A partir de ahi se usa el modelo ligero, que es el adecuado para la CPU.
     assert modelos.modelo_segmentacion() == "birefnet_lite"
+
+
+def test_error_de_windows_en_espanol_se_lee():
+    from editfoto import modelos
+
+    crudo = 'LoadLibrary failed with error 126 "No se puede encontrar el m\u00f3dulo especificado."'.encode("cp1252")
+    try:
+        crudo.decode("utf-8")
+    except UnicodeDecodeError as e:
+        texto = modelos.texto_error(e)
+    assert "m\u00f3dulo especificado" in texto and "126" in texto
+    assert modelos.texto_error(ValueError("otro")) == "ValueError: otro"

@@ -39,6 +39,23 @@ _cerrojo = threading.Lock()
 _solo_cpu: set[str] = set()  # modelos con los que la tarjeta grafica ha fallado en esta sesion
 
 
+def texto_error(e: BaseException) -> str:
+    """Mensaje legible de un error.
+
+    En Windows en espanol, ONNX Runtime pasa a Python mensajes del sistema en la
+    codificacion de Windows (p. ej. "No se puede encontrar el m\xf3dulo especificado")
+    y Python falla al leerlos como UTF-8. Aqui se recupera el texto original.
+    """
+    if isinstance(e, UnicodeDecodeError) and isinstance(e.object, (bytes, bytearray)):
+        crudo = bytes(e.object)
+        for codificacion in ("mbcs", "cp1252", "latin-1"):
+            try:
+                return "Error del sistema: " + crudo.decode(codificacion).strip()
+            except (LookupError, UnicodeDecodeError):
+                continue
+    return f"{type(e).__name__}: {e}"
+
+
 def ruta_modelo(nombre: str, descargar: bool = True) -> Path:
     info = MODELOS[nombre]
     destino = CARPETA_MODELOS / nombre / info.fichero
@@ -101,7 +118,9 @@ def sesion(nombre: str):
         try:
             s = ort.InferenceSession(str(ruta_modelo(nombre)), opciones, providers=proveedores)
         except Exception as e:  # GPU mal configurada: seguimos en CPU en vez de fallar.
-            print(f"Aviso: no se pudo usar la GPU ({e}). Se usa la CPU.", flush=True)
+            print(f"Aviso: no se pudo preparar la tarjeta grafica para {nombre}. Se usa la CPU.\n"
+                  f"  Motivo: {texto_error(e)}", flush=True)
+            _solo_cpu.add(nombre)
             s = ort.InferenceSession(str(ruta_modelo(nombre)), opciones, providers=["CPUExecutionProvider"])
         _sesiones[nombre] = s
         return s
@@ -115,8 +134,8 @@ def ejecutar(nombre: str, entradas: dict) -> list:
     except Exception as e:
         if s.get_providers()[0] == "CPUExecutionProvider":
             raise
-        print(f"Aviso: la tarjeta grafica ha fallado con {nombre} ({type(e).__name__}: {e}). "
-              "Se repite en la CPU (mas lento).", flush=True)
+        print(f"Aviso: la tarjeta grafica ha fallado con {nombre}. Se repite en la CPU (mas lento).\n"
+              f"  Motivo: {texto_error(e)}", flush=True)
         with _cerrojo:
             _solo_cpu.add(nombre)
             _sesiones.pop(nombre, None)
