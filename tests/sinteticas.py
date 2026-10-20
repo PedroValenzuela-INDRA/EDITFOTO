@@ -1,8 +1,8 @@
 """Fotos sinteticas de prueba con la mascara real conocida.
 
 Simulan una sudadera en el suelo del set: fondo gris con algo de ruido, la
-prenda con textura de punto, arrugas (sombras suaves), una mancha (defecto que
-debe conservarse), un cordon que cuelga (debe conservarse), un cable que sale
+prenda con textura de punto, arrugas (sombras suaves), un logo y una mancha
+(deben conservarse), un cordon que cuelga (debe conservarse), un cable que sale
 hasta el borde de la foto y la pata de un tripode (deben desaparecer).
 """
 
@@ -43,6 +43,12 @@ def foto_sintetica(semilla: int = 0, angulo: float = 0.0, exposicion: float = 1.
     tela = np.clip(color * luz, 0, 1)
 
     img = np.where(prenda[..., None], tela, fondo)
+    # Logo blanco en el pecho (estampado: no debe difuminarse), con las mismas arrugas encima.
+    logo = np.zeros((alto, ancho), bool)
+    logo_c = (ancho // 2 - 60, alto // 2 - 120)
+    logo[logo_c[1] - 35:logo_c[1] + 35, logo_c[0] - 90:logo_c[0] + 90] = True
+    logo &= prenda
+    img[logo] = np.clip(np.array([0.92, 0.92, 0.92], np.float32) * luz[logo], 0, 1)
     # Cordon de la capucha: fino, cuelga sobre la prenda y algo fuera, sin llegar al borde.
     cv2.line(img, (ancho // 2 + 30, alto // 2 - 230), (ancho // 2 + 30, alto // 2 + 330), (0.9, 0.9, 0.9), 7)
     cordon = np.zeros((alto, ancho), np.uint8)
@@ -62,5 +68,5 @@ def foto_sintetica(semilla: int = 0, angulo: float = 0.0, exposicion: float = 1.
     alfa_modelo = (prenda | (cordon > 0) | (cable > 0)).astype(np.float32)
     alfa_modelo = cv2.GaussianBlur(alfa_modelo, (0, 0), 1.0)
     datos = {"prenda": prenda, "cordon": cordon > 0, "cable": (cable > 0) & ~prenda, "mancha": mancha_c,
-             "color": color}
+             "logo": logo_c, "color": color}
     return img, alfa_modelo, datos

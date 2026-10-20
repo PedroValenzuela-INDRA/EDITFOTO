@@ -62,6 +62,8 @@ def test_arrugas_se_suavizan_y_la_mancha_se_conserva():
     zona &= ~cv2.dilate(d["cordon"].astype(np.uint8), np.ones((41, 41), np.uint8)).astype(bool)
     mx, my = d["mancha"]
     zona[my - 40:my + 40, mx - 40:mx + 40] = False
+    lx, ly = d["logo"]
+    zona[ly - 80:ly + 80, lx - 130:lx + 130] = False
 
     yy, xx = np.mgrid[0:img.shape[0], 0:img.shape[1]].astype(np.float32)
     onda = np.stack([np.sin(xx / 38 + yy / 55)[zona], np.cos(xx / 38 + yy / 55)[zona], np.ones(zona.sum())], 1)
@@ -83,6 +85,13 @@ def test_arrugas_se_suavizan_y_la_mancha_se_conserva():
                                  x[my + 20:my + 30, mx - 30:mx + 30].reshape(-1, 3)]).mean(0)
         return np.abs(dentro - anillo).sum()
     assert contraste_mancha(salida) > 0.85 * contraste_mancha(img), "la mancha (defecto) no se borra"
+
+    def contraste_logo(x):
+        L = imagen.luminancia(x)
+        dentro = L[ly - 25:ly + 25, lx - 80:lx + 80].mean()
+        fuera = np.concatenate([L[ly - 65:ly - 45, lx - 80:lx + 80].ravel(), L[ly + 45:ly + 65, lx - 80:lx + 80].ravel()])
+        return dentro - fuera.mean()
+    assert contraste_logo(salida) > 0.9 * contraste_logo(img), "el logo (estampado) no se difumina"
     # Fuera de la prenda no cambia nada.
     fuera = ~cv2.dilate(prenda.astype(np.uint8), np.ones((21, 21), np.uint8)).astype(bool)
     assert np.abs(salida - img)[fuera].max() < 1e-3
