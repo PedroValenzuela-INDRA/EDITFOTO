@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EDITFOTO</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232a2a2a'/%3E%3Cpath d='M7 23l6-8 4 5 3-4 5 7z' fill='%23e8e8e8'/%3E%3Ccircle cx='21' cy='10' r='3' fill='%233b82f6'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/estilos.css">
+</head>
+<body>
+
+<header id="cabecera" class="cabecera">
+  <a class="marca" href="#" id="marca" title="Volver a la rejilla">EDITFOTO</a>
+  <span id="insignia" class="insignia" title="Acelerador que usa la IA" hidden></span>
+  <nav class="pestanas" aria-label="Secciones">
+    <button type="button" id="tab-fotos" class="pestana activa">Fotos</button>
+    <button type="button" id="tab-presets" class="pestana">Presets</button>
+  </nav>
+  <div id="progreso" class="progreso" hidden aria-live="polite">
+    <div class="barra" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Progreso del procesado"><div id="barra-relleno" class="barra-relleno"></div></div>
+    <span id="progreso-texto" class="progreso-texto"></span>
+    <button type="button" id="btn-cancelar" class="btn peligro pequeno">Cancelar</button>
+  </div>
+  <span class="espaciador"></span>
+  <button type="button" id="btn-ayuda" class="btn icono" title="Atajos de teclado (tecla ?)" aria-label="Ayuda de atajos">?</button>
+</header>
+
+<section id="barra-lote" class="barra-herramientas" aria-label="Procesado por lotes">
+  <label class="campo-en-linea">Preset del lote
+    <select id="sel-lote" title="Preset que se asigna a las fotos al procesar"></select>
+  </label>
+  <button type="button" id="btn-procesar" class="btn primario">Procesar pendientes</button>
+  <button type="button" id="btn-rehacer" class="btn">Rehacer todas</button>
+  <button type="button" id="btn-recargar" class="btn">Recargar carpeta</button>
+  <span class="espaciador"></span>
+  <span id="contador" class="contador" title="Fotos aprobadas / fotos totales">0 / 0 aprobadas</span>
+  <label class="campo-en-linea">Mostrar
+    <select id="filtro">
+      <option value="todas">Todas</option>
+      <option value="pendientes">Pendientes</option>
+      <option value="sin-aprobar">Sin aprobar</option>
+      <option value="aprobadas">Aprobadas</option>
+      <option value="error">Con error</option>
+    </select>
+  </label>
+  <label class="campo-en-linea tam-mini">Tamaño
+    <input type="range" id="tam-miniaturas" min="140" max="360" step="10" value="210" aria-label="Tamaño de las miniaturas">
+  </label>
+</section>
+
+<main id="principal">
+
+  <!-- ============ REJILLA ============ -->
+  <section id="vista-rejilla" class="vista vista-rejilla" aria-label="Fotos">
+    <div id="rejilla" class="rejilla"></div>
+    <div id="rejilla-vacia" class="vacio" hidden></div>
+  </section>
+
+  <!-- ============ DETALLE ============ -->
+  <section id="vista-detalle" class="vista vista-detalle" hidden aria-label="Detalle de la foto">
+    <div class="detalle-izq">
+      <div class="detalle-barra">
+        <button type="button" id="d-volver" class="btn" title="Volver a la rejilla (Esc)">&larr; Rejilla</button>
+        <div class="d-titulo">
+          <strong id="d-nombre" class="d-nombre"></strong>
+          <span id="d-estado" class="insignia-estado"></span>
+          <span id="d-pos" class="tenue"></span>
+        </div>
+        <div class="modos" role="tablist" aria-label="Modo del visor">
+          <button type="button" role="tab" data-modo="resultado" class="modo activa">Resultado <kbd>1</kbd></button>
+          <button type="button" role="tab" data-modo="antes" class="modo">Antes / Después <kbd>2</kbd></button>
+          <button type="button" role="tab" data-modo="pintar" class="modo">Pintar <kbd>3</kbd></button>
+        </div>
+        <span class="espaciador"></span>
+        <button type="button" id="d-ant" class="btn" title="Foto anterior (flecha izquierda)">&larr; Anterior</button>
+        <button type="button" id="d-sig" class="btn" title="Foto siguiente (flecha derecha)">Siguiente &rarr;</button>
+        <button type="button" id="d-aprobar" class="btn exito" title="Aprobar y pasar a la siguiente (A)">Aprobar y siguiente <kbd>A</kbd></button>
+      </div>
+
+      <div id="visor" class="visor">
+        <!-- Resultado -->
+        <div id="pane-resultado" class="pane pane-resultado">
+          <img id="img-resultado" alt="Resultado" hidden>
+          <div id="msg-resultado" class="pane-mensaje" hidden></div>
+        </div>
+        <!-- Antes / Despues -->
+        <div id="pane-antes" class="pane pane-antes" hidden>
+          <figure class="lado">
+            <figcaption>Antes</figcaption>
+            <div class="lado-caja"><img id="img-antes" alt="Original"></div>
+          </figure>
+          <figure class="lado">
+            <figcaption>Después</figcaption>
+            <div class="lado-caja">
+              <img id="img-despues" alt="Resultado" hidden>
+              <div id="msg-despues" class="pane-mensaje" hidden></div>
+            </div>
+          </figure>
+        </div>
+        <!-- Pintar -->
+        <div id="pane-pintar" class="pane pane-pintar" hidden>
+          <div id="pintor" class="pintor" tabindex="-1">
+            <div id="mundo" class="mundo">
+              <img id="pintor-img" alt="Foto original para pintar" draggable="false">
+              <canvas id="mascara-canvas" class="capa-mascara" hidden></canvas>
+              <div id="capas" class="capas"></div>
+            </div>
+            <div id="cursor-pincel" class="cursor-pincel" hidden></div>
+          </div>
+          <div class="zoombar" aria-label="Zoom">
+            <button type="button" id="z-menos" class="btn pequeno" title="Alejar">&minus;</button>
+            <button type="button" id="z-ajustar" class="btn pequeno" title="Ajustar a la ventana (0)">Ajustar</button>
+            <button type="button" id="z-mas" class="btn pequeno" title="Acercar">+</button>
+            <span id="z-valor" class="tenue">100 %</span>
+            <span class="tenue z-ayuda">Rueda: zoom &middot; Espacio + arrastrar: mover</span>
+          </div>
+        </div>
+
+        <div id="procesando" class="procesando" hidden role="status">
+          <span class="spinner" aria-hidden="true"></span>
+          <span id="procesando-texto">Procesando...</span>
+        </div>
+      </div>
+
+      <p class="nota-ia">La IA solo recorta y borra lo que tú marcas: la prenda y sus desperfectos no se modifican.</p>
+    </div>
+
+    <aside id="panel" class="panel-derecho" aria-label="Ajustes de la foto">
+      <!-- Pinceles (solo en modo Pintar) -->
+      <section id="panel-pinceles" class="bloque" hidden>
+        <h3>Pinceles</h3>
+        <div id="lista-pinceles" class="lista-pinceles"></div>
+        <div class="fila-pincel">
+          <label for="pincel-tam" class="etiqueta-fila">Tamaño</label>
+          <input type="range" id="pincel-tam" min="0" max="100" step="1" value="40">
+          <output id="pincel-tam-valor" class="valor">48 px</output>
+        </div>
+        <p class="ayuda">Teclas [ y ] (o - y +) cambian el tamaño.</p>
+        <div class="fila-botones">
+          <button type="button" id="p-goma" class="btn" aria-pressed="false" title="Goma: borra lo pintado (E)">Goma <kbd>E</kbd></button>
+          <button type="button" id="p-deshacer" class="btn" title="Deshacer el último trazo (Ctrl+Z)">Deshacer</button>
+          <button type="button" id="p-rehacer" class="btn" title="Rehacer (Ctrl+Y)">Rehacer</button>
+        </div>
+        <label class="casilla-linea"><input type="checkbox" id="p-mascara"> Ver máscara <kbd>M</kbd></label>
+        <p class="ayuda">La zona sombreada en morado es lo que ahora se considera fondo.</p>
+        <div class="fila-botones">
+          <button type="button" id="p-aplicar" class="btn primario" disabled>Aplicar pincel</button>
+          <button type="button" id="p-quitar" class="btn" disabled>Quitar capa</button>
+        </div>
+        <p id="p-estado" class="ayuda"></p>
+      </section>
+
+      <section class="bloque">
+        <h3>Preset de esta foto</h3>
+        <select id="sel-preset-foto" aria-label="Preset de esta foto"></select>
+      </section>
+
+      <div id="ajustes">
+        <details class="bloque" open data-grupo="retoque"><summary>Retoque</summary><div id="sl-retoque"></div></details>
+        <details class="bloque" open data-grupo="color"><summary>Color</summary><div id="sl-color"></div></details>
+        <details class="bloque" open data-grupo="posicion"><summary>Posición y tamaño</summary><div id="sl-posicion"></div>
+          <label class="casilla-linea"><input type="checkbox" id="aj-enderezar"> Enderezar automático</label>
+          <p id="aj-enderezar-ayuda" class="ayuda" hidden>Este preset tiene el enderezado desactivado.</p>
+        </details>
+      </div>
+
+      <section class="bloque acciones-panel">
+        <button type="button" id="btn-restablecer" class="btn" title="Quita todos los ajustes de esta foto">Restablecer</button>
+        <button type="button" id="btn-guardar-preset" class="btn" title="Guarda los ajustes de retoque y color en el preset de esta foto">Guardar estos ajustes en el preset</button>
+        <p class="ayuda">Guardar en el preset solo recoge arrugas, color y nitidez; la rotación, el tamaño y el movimiento son propios de cada foto.</p>
+      </section>
+
+      <section class="bloque info">
+        <h3>Información</h3>
+        <dl id="info-foto" class="info-lista"></dl>
+        <div id="info-error" class="aviso-error" hidden></div>
+      </section>
+    </aside>
+  </section>
+
+  <!-- ============ PRESETS ============ -->
+  <section id="vista-presets" class="vista vista-presets" hidden aria-label="Presets">
+    <aside class="presets-lista-caja">
+      <h2>Presets</h2>
+      <ul id="presets-lista" class="presets-lista"></ul>
+
+      <form id="form-nuevo" class="bloque" autocomplete="off">
+        <h3>Crear preset nuevo</h3>
+        <label class="campo">Nombre
+          <input type="text" id="nuevo-nombre" placeholder="por ejemplo: vestidos" required maxlength="40">
+        </label>
+        <label class="campo">Copiar ajustes de
+          <select id="nuevo-base"></select>
+        </label>
+        <button type="submit" class="btn primario">Crear preset</button>
+      </form>
+    </aside>
+
+    <div class="presets-centro">
+      <form id="form-preset" class="bloque" autocomplete="off">
+        <div class="preset-cab">
+          <h2 id="preset-titulo">Preset</h2>
+          <span id="preset-sucio" class="tenue" hidden>Cambios sin guardar</span>
+          <span class="espaciador"></span>
+          <button type="submit" id="preset-guardar" class="btn primario">Guardar preset</button>
+        </div>
+        <p class="ayuda">Los cambios afectan a las fotos que se procesen desde ahora. Para aplicarlos a las que ya están hechas, usa "Rehacer todas".</p>
+        <div id="preset-campos" class="preset-campos"></div>
+      </form>
+
+      <form id="form-aprender" class="bloque" autocomplete="off">
+        <h3>Aprender de mis fotos favoritas</h3>
+        <p class="ayuda">Mide el encuadre, el fondo y la sombra de tus fotos de ejemplo y crea un preset que las imita.</p>
+        <div class="campos-fila">
+          <label class="campo">Carpeta con las fotos de ejemplo
+            <input type="text" id="aprender-carpeta" placeholder="vacío = fotos/ejemplos">
+          </label>
+          <label class="campo">Nombre del preset
+            <input type="text" id="aprender-nombre" placeholder="por ejemplo: mi_estilo" required maxlength="40">
+          </label>
+          <label class="campo">Partir de
+            <select id="aprender-base"></select>
+          </label>
+        </div>
+        <div class="fila-botones">
+          <button type="submit" id="aprender-boton" class="btn primario">Aprender</button>
+          <span id="aprender-estado" class="tenue" role="status"></span>
+        </div>
+        <pre id="aprender-resumen" class="resumen" hidden></pre>
+      </form>
+    </div>
+  </section>
+
+</main>
+
+<!-- Ayuda de atajos -->
+<dialog id="dlg-ayuda" class="dialogo">
+  <form method="dialog">
+    <h2>Atajos de teclado</h2>
+    <div class="atajos">
+      <div><h3>Detalle de la foto</h3>
+        <dl>
+          <dt><kbd>&larr;</kbd> <kbd>&rarr;</kbd></dt><dd>Foto anterior / siguiente</dd>
+          <dt><kbd>A</kbd></dt><dd>Aprobar y pasar a la siguiente (si ya está aprobada, la desaprueba)</dd>
+          <dt><kbd>Esc</kbd></dt><dd>Volver a la rejilla</dd>
+          <dt><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></dt><dd>Resultado, Antes / Después, Pintar</dd>
+        </dl>
+      </div>
+      <div><h3>Modo Pintar</h3>
+        <dl>
+          <dt><kbd>[</kbd> <kbd>]</kbd> o <kbd>-</kbd> <kbd>+</kbd></dt><dd>Pincel más pequeño / más grande</dd>
+          <dt><kbd>E</kbd></dt><dd>Goma</dd>
+          <dt><kbd>Ctrl</kbd>+<kbd>Z</kbd></dt><dd>Deshacer el último trazo</dd>
+          <dt><kbd>Ctrl</kbd>+<kbd>Y</kbd></dt><dd>Rehacer</dd>
+          <dt><kbd>M</kbd></dt><dd>Ver u ocultar la máscara</dd>
+          <dt>Rueda</dt><dd>Zoom sobre el cursor</dd>
+          <dt><kbd>Espacio</kbd> + arrastrar</dt><dd>Mover la foto</dd>
+          <dt><kbd>0</kbd></dt><dd>Ajustar a la ventana</dd>
+        </dl>
+      </div>
+      <div><h3>General</h3>
+        <dl>
+          <dt><kbd>?</kbd></dt><dd>Abrir o cerrar esta ayuda</dd>
+        </dl>
+      </div>
+    </div>
+    <div class="dialogo-botones"><button class="btn primario" value="cerrar">Cerrar</button></div>
+  </form>
+</dialog>
+
+<!-- Confirmacion -->
+<dialog id="dlg-confirmar" class="dialogo dialogo-pequeno">
+  <form method="dialog">
+    <h2 id="confirmar-titulo">Confirmar</h2>
+    <p id="confirmar-texto"></p>
+    <div class="dialogo-botones">
+      <button class="btn" value="no" id="confirmar-no">Cancelar</button>
+      <button class="btn primario" value="si" id="confirmar-si">Aceptar</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="avisos" class="avisos" aria-live="assertive" aria-atomic="false"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
