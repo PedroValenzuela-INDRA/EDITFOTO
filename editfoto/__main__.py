@@ -71,8 +71,14 @@ def cmd_info(a):
     print(f"Python {sys.version.split()[0]}")
     print(f"Aceleradores disponibles: {', '.join(modelos.proveedores_disponibles())}")
     print(f"Se usara: {modelos.proveedores_preferidos()[0]}")
-    print(f"Modelo de recorte: {modelos.modelo_segmentacion()}")
     print(f"Presets: {', '.join(config.listar_presets())}")
+    if a.sin_prueba:
+        return
+    print("Probando el recorte con IA...", flush=True)
+    r = modelos.probar_acelerador()
+    print(f"Prueba OK: modelo {r['modelo']} en {r['proveedor']}, {r['segundos']:.1f} s por foto")
+    if r["proveedor"] == "CPUExecutionProvider" and modelos.proveedores_preferidos()[0] != "CPUExecutionProvider":
+        print("AVISO: la tarjeta grafica no ha funcionado y se usara la CPU. Actualiza el driver de la tarjeta.")
 
 
 def main(argv=None):
@@ -104,7 +110,8 @@ def main(argv=None):
     s.add_argument("--completo", action="store_true", help="Incluye BiRefNet completo (mejor con GPU)")
     s.set_defaults(func=cmd_descargar)
 
-    s = sub.add_parser("info", help="Muestra el hardware detectado")
+    s = sub.add_parser("info", help="Muestra el hardware detectado y hace un recorte de prueba")
+    s.add_argument("--sin-prueba", action="store_true", help="No hace el recorte de prueba")
     s.set_defaults(func=cmd_info)
 
     a = ap.parse_args(argv)

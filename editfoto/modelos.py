@@ -36,6 +36,7 @@ MODELOS = {
 
 _sesiones: dict[str, object] = {}
 _cerrojo = threading.Lock()
+_solo_cpu: set[str] = set()  # modelos con los que la tarjeta grafica ha fallado en esta sesion
 
 
 def ruta_modelo(nombre: str, descargar: bool = True) -> Path:
@@ -92,7 +93,7 @@ def sesion(nombre: str):
 
         opciones = ort.SessionOptions()
         opciones.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        proveedores = proveedores_preferidos()
+        proveedores = ["CPUExecutionProvider"] if nombre in _solo_cpu else proveedores_preferidos()
         if "DmlExecutionProvider" in proveedores:
             # DirectML no admite ejecucion en paralelo ni reordenar memoria.
             opciones.enable_mem_pattern = False
@@ -106,10 +107,47 @@ def sesion(nombre: str):
         return s
 
 
+def ejecutar(nombre: str, entradas: dict) -> list:
+    """Ejecuta el modelo; si la tarjeta grafica falla, lo repite en la CPU y lo recuerda."""
+    s = sesion(nombre)
+    try:
+        return s.run(None, entradas)
+    except Exception as e:
+        if s.get_providers()[0] == "CPUExecutionProvider":
+            raise
+        print(f"Aviso: la tarjeta grafica ha fallado con {nombre} ({type(e).__name__}: {e}). "
+              "Se repite en la CPU (mas lento).", flush=True)
+        with _cerrojo:
+            _solo_cpu.add(nombre)
+            _sesiones.pop(nombre, None)
+        return sesion(nombre).run(None, entradas)
+
+
+def proveedor_de(nombre: str) -> str:
+    return sesion(nombre).get_providers()[0]
+
+
 def modelo_segmentacion(preferencia: str = "auto") -> str:
     if preferencia in ("birefnet", "birefnet_lite"):
         return preferencia
-    return "birefnet" if hay_gpu() else "birefnet_lite"
+    # El modelo completo solo compensa con tarjeta grafica; en CPU va mejor el lite.
+    return "birefnet" if hay_gpu() and "birefnet" not in _solo_cpu else "birefnet_lite"
+
+
+def probar_acelerador() -> dict:
+    """Recorte de prueba con una imagen vacia: dice si la tarjeta grafica funciona y cuanto tarda."""
+    import time
+
+    import numpy as np
+
+    nombre = modelo_segmentacion()
+    s = sesion(nombre)
+    x = {s.get_inputs()[0].name: np.zeros((1, 3, 1024, 1024), np.float32)}
+    ejecutar(nombre, x)  # la primera vez se prepara el modelo en la tarjeta (mas lenta)
+    nombre = modelo_segmentacion()  # puede haber cambiado si la tarjeta ha fallado
+    inicio = time.time()
+    ejecutar(nombre, x)
+    return {"modelo": nombre, "proveedor": proveedor_de(nombre), "segundos": time.time() - inicio}
 
 
 def descargar_todos(incluir_completo: bool | None = None) -> None:

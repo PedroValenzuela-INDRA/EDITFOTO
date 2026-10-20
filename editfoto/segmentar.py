@@ -14,9 +14,10 @@ _LADO = 1024
 
 def segmentar(img: np.ndarray, modelo: str = "auto") -> np.ndarray:
     h, w = img.shape[:2]
-    s = modelos.sesion(modelos.modelo_segmentacion(modelo))
+    nombre = modelos.modelo_segmentacion(modelo)
+    s = modelos.sesion(nombre)
     x = cv2.resize(img, (_LADO, _LADO), interpolation=cv2.INTER_AREA if max(h, w) > _LADO else cv2.INTER_LINEAR)
     x = ((x - _MEDIA) / _DESV).transpose(2, 0, 1)[None].astype(np.float32)
-    salida = s.run(None, {s.get_inputs()[0].name: x})[0][0, 0]
+    salida = modelos.ejecutar(nombre, {s.get_inputs()[0].name: x})[0][0, 0]
     alfa = 1.0 / (1.0 + np.exp(-salida))  # el modelo devuelve logits
     return np.clip(cv2.resize(alfa.astype(np.float32), (w, h), interpolation=cv2.INTER_LINEAR), 0, 1)

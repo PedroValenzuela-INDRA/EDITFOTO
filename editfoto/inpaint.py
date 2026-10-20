@@ -37,8 +37,7 @@ def _rellenar_zona(img: np.ndarray, zona: np.ndarray, caja: tuple[int, int, int,
     x = cv2.resize(recorte, (_LADO, _LADO), interpolation=cv2.INTER_AREA if lado > _LADO else cv2.INTER_CUBIC)
     m = cv2.resize(zona_r, (_LADO, _LADO), interpolation=cv2.INTER_NEAREST)
     m = cv2.dilate(m, np.ones((5, 5), np.uint8)).astype(np.float32)
-    s = modelos.sesion("lama")
-    salida = s.run(None, {"image": x.transpose(2, 0, 1)[None].astype(np.float32), "mask": m[None, None]})[0]
+    salida = modelos.ejecutar("lama", {"image": x.transpose(2, 0, 1)[None].astype(np.float32), "mask": m[None, None]})[0]
     relleno = np.clip(salida[0].transpose(1, 2, 0) / 255.0, 0, 1).astype(np.float32)
     relleno = cv2.resize(relleno, (lado, lado), interpolation=cv2.INTER_CUBIC)
 

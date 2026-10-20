@@ -212,3 +212,33 @@ def test_modelos_reales():
     pincel[my - 20:my + 20, mx - 20:mx + 20] = 1
     limpia = inpaint.borrar(img, pincel)
     assert np.abs(limpia[my - 5:my + 5, mx - 5:mx + 5] - img[my - 5:my + 5, mx - 5:mx + 5]).max() > 0.05
+
+
+def test_si_la_grafica_falla_se_repite_en_cpu(monkeypatch):
+    from editfoto import modelos
+
+    class SesionGraficaRota:
+        def get_providers(self):
+            return ["DmlExecutionProvider", "CPUExecutionProvider"]
+
+        def run(self, *_):
+            raise RuntimeError("operacion no soportada")
+
+    class SesionCpu:
+        def get_providers(self):
+            return ["CPUExecutionProvider"]
+
+        def run(self, *_):
+            return ["ok"]
+
+    def sesion_falsa(nombre):
+        return SesionCpu() if nombre in modelos._solo_cpu else SesionGraficaRota()
+
+    monkeypatch.setattr(modelos, "sesion", sesion_falsa)
+    monkeypatch.setattr(modelos, "_solo_cpu", set())
+    monkeypatch.setattr(modelos, "hay_gpu", lambda: True)
+    assert modelos.modelo_segmentacion() == "birefnet"
+    assert modelos.ejecutar("birefnet", {}) == ["ok"]
+    assert "birefnet" in modelos._solo_cpu
+    # A partir de ahi se usa el modelo ligero, que es el adecuado para la CPU.
+    assert modelos.modelo_segmentacion() == "birefnet_lite"
