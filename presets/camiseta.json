@@ -1,0 +1,5 @@
+{
+  "descripcion": "Camisetas y camisas",
+  "encuadre": {"relleno": 0.82, "centro_x": 0.5, "centro_y": 0.5},
+  "arrugas": {"fuerza": 0.6, "respeto_bordes": 0.6}
+}

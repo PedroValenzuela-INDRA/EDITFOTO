@@ -1,0 +1,16 @@
+{
+  "descripcion": "Pantalones y vaqueros estirados en vertical",
+  "encuadre": {
+    "relleno": 0.88,
+    "centro_x": 0.5,
+    "centro_y": 0.5
+  },
+  "arrugas": {
+    "fuerza": 0.55,
+    "escala": 0.12
+  },
+  "enderezar": {
+    "activo": true,
+    "max_grados": 6.0
+  }
+}

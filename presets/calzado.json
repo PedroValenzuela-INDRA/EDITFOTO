@@ -1,0 +1,6 @@
+{
+  "descripcion": "Zapatillas y zapatos: sin enderezado por simetria ni suavizado",
+  "encuadre": {"relleno": 0.78, "centro_x": 0.5, "centro_y": 0.52},
+  "arrugas": {"fuerza": 0.0},
+  "enderezar": {"activo": false, "max_grados": 0.0}
+}

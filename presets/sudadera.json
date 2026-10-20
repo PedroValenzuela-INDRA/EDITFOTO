@@ -1,0 +1,16 @@
+{
+  "descripcion": "Sudaderas con o sin capucha, mangas abiertas",
+  "encuadre": {
+    "relleno": 0.84,
+    "centro_x": 0.5,
+    "centro_y": 0.5
+  },
+  "arrugas": {
+    "fuerza": 0.6,
+    "escala": 0.12
+  },
+  "enderezar": {
+    "activo": true,
+    "max_grados": 6.0
+  }
+}
