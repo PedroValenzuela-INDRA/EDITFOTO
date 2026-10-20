@@ -102,6 +102,13 @@ Hay un documento con la API del servidor local en [`docs/API.md`](docs/API.md).
 - La **percha** se mantiene, porque el recorte la considera parte de la prenda. Si no la quieres, píntala con "No es prenda" (o cuelga sin percha).
 - Las arrugas muy marcadas (pliegues con sombra dura) se atenúan pero no desaparecen. Es deliberado: un pliegue duro se parece demasiado a una costura o a un defecto.
 - La igualación de exposición necesita al menos 3 fotos del mismo set en el lote.
+- El pincel **Borrar objeto** píntalo solo donde el cable cruza por encima de la prenda. Si pintas un hueco junto a la prenda (axila, entre las perneras), ese trozo de suelo rellenado puede acabar formando parte de la prenda.
+
+## Si algo falla
+
+- **"Se usará: CPUExecutionProvider" aunque elegiste NVIDIA**: actualiza el driver de NVIDIA (el paquete de IA usa CUDA 13, que necesita un driver reciente) y vuelve a ejecutar `instalar.bat`.
+- **Errores al procesar con la tarjeta gráfica**: ejecuta `instalar.bat` otra vez, elige la opción 3 (solo CPU) y comprueba que funciona. Así sabremos si el problema es del acelerador.
+- **Una foto sale con error en la rejilla**: ábrela, el mensaje aparece en el panel derecho. Una foto corrupta o a medio copiar se arregla volviendo a copiarla y pulsando "Recargar carpeta".
 
 ## Línea de comandos
 

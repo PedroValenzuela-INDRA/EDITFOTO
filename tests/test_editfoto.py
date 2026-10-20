@@ -118,14 +118,17 @@ def test_enderezado_no_toca_prendas_asimetricas():
     assert composicion.angulo_enderezado(m, 6.0) == 0.0
 
 
-def test_encuadre_centra_y_rellena():
+@pytest.mark.parametrize("lienzo", [(1500, 2000), (600, 800)])  # ampliar y reducir mucho (prerreduccion)
+def test_encuadre_centra_y_rellena(lienzo):
     img, alfa, d = foto_sintetica()
-    _, alfa_l, info = composicion.encuadrar(img, d["prenda"].astype(np.float32), (1500, 2000), 0.8, 0.5, 0.5)
+    _, alfa_l, info = composicion.encuadrar(img, d["prenda"].astype(np.float32), lienzo, 0.8, 0.5, 0.5)
+    if lienzo[0] == 600:
+        assert info["escala"] < 0.75, "este caso debe pasar por la reduccion previa"
     ys, xs = np.nonzero(alfa_l > 0.5)
     ancho, alto = xs.max() - xs.min(), ys.max() - ys.min()
-    assert max(ancho / 1500, alto / 2000) == pytest.approx(0.8, abs=0.01)
-    assert (xs.min() + xs.max()) / 2 == pytest.approx(750, abs=4)
-    assert (ys.min() + ys.max()) / 2 == pytest.approx(1000, abs=4)
+    assert max(ancho / lienzo[0], alto / lienzo[1]) == pytest.approx(0.8, abs=0.01)
+    assert (xs.min() + xs.max()) / 2 == pytest.approx(lienzo[0] / 2, abs=3)
+    assert (ys.min() + ys.max()) / 2 == pytest.approx(lienzo[1] / 2, abs=3)
 
 
 def test_color_iguala_exposicion_del_mismo_set():
