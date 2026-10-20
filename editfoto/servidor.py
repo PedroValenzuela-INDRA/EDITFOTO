@@ -54,6 +54,10 @@ def crear_app(proyecto: Proyecto) -> FastAPI:
     async def _valor(_: Request, e: ValueError):
         return JSONResponse({"detail": str(e)}, status_code=400)
 
+    @app.exception_handler(OSError)  # incluye PIL.UnidentifiedImageError (foto corrupta)
+    async def _fichero(_: Request, e: OSError):
+        return JSONResponse({"detail": f"No se puede leer la foto: {e}"}, status_code=422)
+
     # ---------- informacion general ----------
 
     @app.get("/api/estado")
@@ -92,8 +96,7 @@ def crear_app(proyecto: Proyecto) -> FastAPI:
         nombre = datos.get("nombre")
         if not nombre:
             raise HTTPException(400, "Falta el nombre del preset")
-        with proyecto.cerrojo:
-            preset_nuevo, resumen = aprender_preset(carpeta, nombre, datos.get("base") or "generico")
+        preset_nuevo, resumen = aprender_preset(carpeta, nombre, datos.get("base") or "generico")
         return {"preset": preset_nuevo, "resumen": resumen}
 
     # ---------- fotos ----------

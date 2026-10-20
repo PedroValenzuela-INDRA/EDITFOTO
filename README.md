@@ -61,7 +61,7 @@ Los retoques se guardan: puedes cerrar y volver otro día, o cambiar un ajuste y
 
 Un preset guarda cómo quieres que quede un tipo de prenda: tamaño de la foto final, cuánto ocupa la prenda y dónde, color o imagen de fondo, sombra, fuerza del suavizado de arrugas, enderezado y nitidez. Vienen `generico`, `sudadera`, `pantalon`, `jersey`, `camiseta` y `calzado`, y se editan desde la pestaña **Presets** de la aplicación (se guardan en `presets/*.json`).
 
-Si un ajuste te gusta para una foto concreta, el botón **Guardar estos ajustes en el preset** lo convierte en el nuevo valor por defecto.
+Si un ajuste te gusta para una foto concreta, el botón **Guardar estos ajustes en el preset** lo convierte en el nuevo valor por defecto. Para borrar un preset, borra su fichero en `presets/`.
 
 ### Aprender de tus fotos favoritas
 
