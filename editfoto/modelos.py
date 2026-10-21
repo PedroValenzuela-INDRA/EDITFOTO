@@ -11,9 +11,12 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path
 
-# Los modelos se guardan dentro de la carpeta de la app para que todo quede junto.
+# Por defecto todo queda dentro de la carpeta de la app. El lanzador (EDITFOTO.exe) separa
+# el codigo, que se reemplaza en cada actualizacion, de los modelos y de tus datos.
 RAIZ = Path(__file__).resolve().parent.parent
 CARPETA_MODELOS = Path(os.environ.get("EDITFOTO_MODELOS", RAIZ / "modelos"))
+# Fotos y presets propios: nunca se tocan al actualizar.
+DATOS = Path(os.environ.get("EDITFOTO_DATOS", RAIZ))
 
 
 @dataclass(frozen=True)

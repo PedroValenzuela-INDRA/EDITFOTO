@@ -1,4 +1,8 @@
-"""Presets de edicion (uno por tipo de prenda) guardados como JSON en la carpeta presets/.
+"""Presets de edicion (uno por tipo de prenda) guardados como JSON.
+
+Hay dos carpetas: la del programa (presets/ del repositorio, se actualiza sola) y
+la tuya (DATOS/presets). Lo que guardas va siempre a la tuya y tiene prioridad,
+asi una actualizacion nunca pisa tus ajustes.
 
 Un preset solo necesita indicar lo que cambia respecto a POR_DEFECTO.
 Los ajustes de una foto concreta se fusionan encima del preset con la misma forma.
@@ -11,9 +15,10 @@ import json
 import re
 from pathlib import Path
 
-from .modelos import RAIZ
+from .modelos import DATOS, RAIZ
 
 CARPETA_PRESETS = RAIZ / "presets"
+CARPETA_PRESETS_USUARIO = DATOS / "presets"
 
 POR_DEFECTO: dict = {
     "nombre": "generico",
@@ -71,15 +76,20 @@ def nombre_valido(nombre: str) -> str:
 
 
 def listar_presets() -> list[str]:
-    nombres = {p.stem for p in CARPETA_PRESETS.glob("*.json")}
+    nombres = {p.stem for carpeta in (CARPETA_PRESETS, CARPETA_PRESETS_USUARIO) for p in carpeta.glob("*.json")}
     nombres.add("generico")
     return sorted(nombres)
+
+
+def _ruta_preset(nombre: str) -> Path:
+    propia = CARPETA_PRESETS_USUARIO / f"{nombre}.json"
+    return propia if propia.exists() else CARPETA_PRESETS / f"{nombre}.json"
 
 
 def cargar_preset(nombre: str | None) -> dict:
     """Preset completo (POR_DEFECTO + lo que diga el fichero). Si no existe, el generico."""
     nombre = nombre or "generico"
-    ruta = CARPETA_PRESETS / f"{nombre}.json"
+    ruta = _ruta_preset(nombre)
     if not ruta.exists():
         return fusionar(POR_DEFECTO, {"nombre": nombre} if nombre != "generico" else {})
     with open(ruta, encoding="utf-8") as f:
@@ -91,8 +101,8 @@ def cargar_preset(nombre: str | None) -> dict:
 
 def guardar_preset(preset: dict) -> Path:
     nombre = nombre_valido(preset.get("nombre", ""))
-    CARPETA_PRESETS.mkdir(parents=True, exist_ok=True)
-    ruta = CARPETA_PRESETS / f"{nombre}.json"
+    CARPETA_PRESETS_USUARIO.mkdir(parents=True, exist_ok=True)
+    ruta = CARPETA_PRESETS_USUARIO / f"{nombre}.json"
     datos = dict(preset, nombre=nombre)
     with open(ruta, "w", encoding="utf-8") as f:
         json.dump(datos, f, ensure_ascii=False, indent=2)

@@ -7,11 +7,11 @@ import sys
 import time
 from pathlib import Path
 
-from .modelos import RAIZ
+from .modelos import DATOS
 
-ENTRADA = str(RAIZ / "fotos" / "entrada")
-SALIDA = str(RAIZ / "fotos" / "salida")
-EJEMPLOS = str(RAIZ / "fotos" / "ejemplos")
+ENTRADA = str(DATOS / "fotos" / "entrada")
+SALIDA = str(DATOS / "fotos" / "salida")
+EJEMPLOS = str(DATOS / "fotos" / "ejemplos")
 
 
 def cmd_servidor(a):

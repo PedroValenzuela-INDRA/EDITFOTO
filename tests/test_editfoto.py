@@ -254,3 +254,30 @@ def test_error_de_windows_en_espanol_se_lee():
         texto = modelos.texto_error(e)
     assert "m\u00f3dulo especificado" in texto and "126" in texto
     assert modelos.texto_error(ValueError("otro")) == "ValueError: otro"
+
+
+def test_presets_propios_sobreviven_a_una_actualizacion(tmp_path, monkeypatch):
+    import shutil
+
+    programa_v1 = tmp_path / "app_v1" / "presets"
+    shutil.copytree(config.CARPETA_PRESETS, programa_v1)
+    propios = tmp_path / "datos" / "presets"
+    monkeypatch.setattr(config, "CARPETA_PRESETS", programa_v1)
+    monkeypatch.setattr(config, "CARPETA_PRESETS_USUARIO", propios)
+
+    sudadera = config.cargar_preset("sudadera")
+    sudadera["arrugas"]["fuerza"] = 0.93
+    ruta = config.guardar_preset(sudadera)
+    assert ruta.parent == propios
+    config.guardar_preset(config.fusionar(config.cargar_preset("generico"), {"nombre": "mi_estilo"}))
+
+    # La actualizacion reemplaza la carpeta del programa entera (con un preset nuevo).
+    programa_v2 = tmp_path / "app_v2" / "presets"
+    shutil.copytree(programa_v1, programa_v2)
+    (programa_v2 / "abrigo.json").write_text('{"descripcion": "nuevo"}', encoding="utf-8")
+    shutil.rmtree(tmp_path / "app_v1")
+    monkeypatch.setattr(config, "CARPETA_PRESETS", programa_v2)
+
+    assert config.cargar_preset("sudadera")["arrugas"]["fuerza"] == 0.93
+    assert config.cargar_preset("pantalon")["arrugas"]["escala"] == 0.12  # del programa
+    assert {"mi_estilo", "abrigo", "sudadera"} <= set(config.listar_presets())
