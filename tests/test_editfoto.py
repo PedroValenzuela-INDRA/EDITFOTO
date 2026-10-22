@@ -214,8 +214,13 @@ def test_modelos_reales():
     assert np.abs(limpia[my - 5:my + 5, mx - 5:mx + 5] - img[my - 5:my + 5, mx - 5:mx + 5]).max() > 0.05
 
 
-def test_si_la_grafica_falla_se_repite_en_cpu(monkeypatch):
+def test_si_la_grafica_falla_se_repite_en_cpu(monkeypatch, tmp_path):
     from editfoto import modelos
+
+    monkeypatch.setattr(modelos, "CARPETA_MODELOS", tmp_path)
+    completo = modelos._ruta_destino("birefnet")
+    completo.parent.mkdir(parents=True)
+    completo.write_bytes(b"x")  # el modelo completo ya esta descargado
 
     class SesionGraficaRota:
         def get_providers(self):

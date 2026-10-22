@@ -1,0 +1,136 @@
+name: Build & Release
+
+# Mismo metodo que INDRA HUB: este repo (privado) compila EDITFOTO.exe en Windows y lo
+# publica como Release en el repo PUBLICO de descargas, desde donde la app se actualiza sola.
+#  1) Release:  sube __version__ en editfoto/version.py, su entrada en CHANGELOG.md y
+#               git tag v0.2.0 && git push origin v0.2.0
+#  2) Prueba:   Actions > Build & Release > Run workflow (sin "publicar"): compila, pasa
+#               la autoprueba y deja el .exe como artefacto descargable, sin publicar nada.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      publicar:
+        description: 'Publicar la release en el repo publico (si no, solo compila y prueba)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      PUBLICAR: ${{ github.ref_type == 'tag' || inputs.publicar }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Calcular version y tag
+        id: meta
+        shell: bash
+        run: |
+          PYVER=$(python -c "from editfoto.version import __version__; print(__version__)")
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAG="${GITHUB_REF_NAME}"
+            if [ "${TAG#v}" != "$PYVER" ]; then
+              echo "::error::El tag ($TAG) no coincide con editfoto/version.py ($PYVER). Igualalos."
+              exit 1
+            fi
+          else
+            TAG="v${PYVER}"
+          fi
+          echo "Version: $PYVER | Tag: $TAG | Publicar: $PUBLICAR"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$PYVER" >> "$GITHUB_OUTPUT"
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt onnxruntime-directml "pywebview>=5.0" "pyinstaller>=6.10" pytest httpx
+
+      - name: Tests (en Windows)
+        run: python -m pytest tests -q
+
+      - name: Modelos para la autoprueba (en cache)
+        uses: actions/cache@v4
+        with:
+          path: modelos_prueba
+          key: modelos-birefnet-lite-lama-v1
+
+      - name: Descargar modelos si no estan en cache
+        shell: bash
+        env:
+          EDITFOTO_MODELOS: ${{ github.workspace }}/modelos_prueba
+        run: python -c "from editfoto import modelos; [print(modelos.ruta_modelo(n)) for n in ('birefnet_lite', 'lama')]"
+
+      - name: Compilar EDITFOTO.exe
+        run: pyinstaller --noconfirm --clean EDITFOTO.spec
+
+      - name: Autoprueba del .exe compilado
+        shell: pwsh
+        run: |
+          $env:EDITFOTO_MODELOS = "$PWD\modelos_prueba"
+          $env:EDITFOTO_DATOS = "$env:RUNNER_TEMP\editfoto_datos"
+          $p = Start-Process -FilePath "dist\EDITFOTO.exe" -ArgumentList '--autoprueba', "$PWD\autoprueba.json" -Wait -PassThru
+          if (Test-Path autoprueba.json) { Get-Content autoprueba.json } else { Write-Error "La autoprueba no ha escrito resultado" }
+          $r = Get-Content autoprueba.json -Raw | ConvertFrom-Json
+          if ($p.ExitCode -ne 0 -or -not $r.ok) { Write-Error "La autoprueba del .exe ha fallado"; exit 1 }
+          if ($r.pasos.imports.ventana -ne 'ok') { Write-Error "pywebview no viaja en el .exe"; exit 1 }
+          "Tamano del .exe: {0:N0} MB" -f ((Get-Item dist\EDITFOTO.exe).Length / 1MB)
+
+      - name: Guardar el .exe como artefacto (descargable desde esta ejecucion)
+        uses: actions/upload-artifact@v4
+        with:
+          name: EDITFOTO-${{ steps.meta.outputs.tag }}
+          path: dist/EDITFOTO.exe
+          retention-days: 14
+
+      - name: Notas de la version (desde CHANGELOG.md)
+        if: env.PUBLICAR == 'true'
+        shell: bash
+        run: |
+          if ! python .github/notas_version.py "${{ steps.meta.outputs.version }}" CHANGELOG.md > release_notes.md; then
+            echo "::error::CHANGELOG.md no tiene la entrada de ${{ steps.meta.outputs.tag }}. Escribela antes de publicar."
+            exit 1
+          fi
+          cat release_notes.md
+
+      - name: Comprobar el token de publicacion
+        if: env.PUBLICAR == 'true'
+        shell: bash
+        env:
+          RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          if [ -z "$RELEASES_TOKEN" ]; then
+            echo "::error::Falta el secreto RELEASES_TOKEN en este repo. Sigue docs/MANTENIMIENTO.md (pasos 2 a 4)."
+            exit 1
+          fi
+
+      - name: Publicar Release en el repo PUBLICO de descargas
+        if: env.PUBLICAR == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: ${{ vars.RELEASES_OWNER || github.repository_owner }}/${{ vars.RELEASES_REPO || 'EDITFOTO-Releases' }}
+          token: ${{ secrets.RELEASES_TOKEN }}
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: EDITFOTO ${{ steps.meta.outputs.tag }}
+          body_path: release_notes.md
+          files: dist/EDITFOTO.exe
+          make_latest: 'true'
+          fail_on_unmatched_files: true

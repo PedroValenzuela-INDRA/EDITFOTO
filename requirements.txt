@@ -1,7 +1,6 @@
 numpy>=1.26
 opencv-contrib-python-headless>=4.9
 pillow>=10
-huggingface_hub>=0.23
 fastapi>=0.110
 uvicorn>=0.29
 python-multipart>=0.0.9

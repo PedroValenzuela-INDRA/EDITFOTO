@@ -6,6 +6,9 @@ La API esta documentada en docs/API.md.
 from __future__ import annotations
 
 import io
+import os
+import subprocess
+import sys
 import threading
 import time
 from dataclasses import asdict
@@ -15,7 +18,7 @@ from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, config, modelos
+from . import __version__, actualizador, config, modelos
 from .proyecto import TIPOS_PINCEL, Proyecto
 
 WEB = Path(__file__).resolve().parent / "web"
@@ -37,6 +40,8 @@ class Trabajo:
 def crear_app(proyecto: Proyecto) -> FastAPI:
     app = FastAPI(title="EDITFOTO", version=__version__)
     trabajo = Trabajo()
+    app.state.trabajo = trabajo
+    app.state.salir = None  # lo pone escritorio.py: cerrar la app desde la interfaz
 
     def foto_json(id_: str) -> dict:
         f = proyecto.foto(id_)
@@ -63,11 +68,47 @@ def crear_app(proyecto: Proyecto) -> FastAPI:
     @app.get("/api/estado")
     def estado():
         proveedor = modelos.proveedores_preferidos()[0].replace("ExecutionProvider", "")
-        return {"version": __version__, "entrada": str(proyecto.entrada), "salida": str(proyecto.salida),
+        return {"app": "EDITFOTO", "version": __version__, "exe": actualizador.es_exe(),
+                "entrada": str(proyecto.entrada), "salida": str(proyecto.salida),
+                "ejemplos": str(modelos.DATOS / "fotos" / "ejemplos"),
                 "proveedor": proveedor, "gpu": proveedor != "CPU",
                 "modelo_segmentacion": modelos.modelo_segmentacion(),
                 "presets": config.listar_presets(), "preset_por_defecto": proyecto.preset_por_defecto,
                 "referencia_fondo": proyecto.referencia_fondo() is not None}
+
+    @app.get("/api/modelos")
+    def estado_modelos():
+        return modelos.estado_modelos()
+
+    @app.get("/api/actualizacion")
+    def estado_actualizacion():
+        return dict(actualizador.ESTADO, version_actual=__version__)
+
+    @app.get("/api/novedades")
+    def novedades():
+        notas = actualizador.leer_novedades()
+        return {"version": __version__, "notas": notas} if notas else {}
+
+    @app.post("/api/abrir_carpeta")
+    def abrir_carpeta(datos: dict = Body(...)):
+        rutas = {"entrada": proyecto.entrada, "salida": proyecto.salida,
+                 "ejemplos": modelos.DATOS / "fotos" / "ejemplos"}
+        ruta = rutas.get(datos.get("cual"))
+        if ruta is None:
+            raise HTTPException(400, "cual debe ser entrada, salida o ejemplos")
+        ruta.mkdir(parents=True, exist_ok=True)
+        if sys.platform == "win32":
+            os.startfile(ruta)  # noqa: S606 - abre el Explorador en la carpeta
+        else:
+            subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", str(ruta)])
+        return {"ruta": str(ruta)}
+
+    @app.post("/api/salir")
+    def salir():
+        if not app.state.salir:
+            raise HTTPException(400, "Solo disponible en EDITFOTO.exe")
+        threading.Timer(0.3, app.state.salir).start()
+        return {"ok": True}
 
     # ---------- presets ----------
 
