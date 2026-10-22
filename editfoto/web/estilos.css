@@ -275,7 +275,7 @@ input[type="range"] { accent-color: var(--primario); width: 100%; cursor: pointe
   display: flex; gap: 4px;
   opacity: 0; transition: opacity .12s;
 }
-.tarjeta:hover .giros, .tarjeta:focus-visible .giros, .giros:has(:focus-visible), .tarjeta.procesando .giros { opacity: 1; }
+.tarjeta:hover .giros, .tarjeta:focus-visible .giros, .giros:has(:focus-visible) { opacity: 1; }
 .giro {
   width: 28px; height: 28px; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
@@ -314,9 +314,10 @@ input[type="range"] { accent-color: var(--primario); width: 100%; cursor: pointe
   grid-template-columns: minmax(0, 1fr) 340px;
 }
 .detalle-izq { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 12px 14px 8px 16px; gap: 10px; }
-.detalle-barra { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.detalle-barra { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .d-titulo { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.d-nombre { max-width: 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.d-nav { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+.d-nombre { max-width: 130px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .modos { display: inline-flex; border: 1px solid var(--borde-2); border-radius: 6px; overflow: hidden; margin-left: 6px; }
 .modo {
   font: inherit; color: var(--suave); background: var(--card);
@@ -511,6 +512,7 @@ details[open] > summary { margin-bottom: 8px; }
 .dialogo-pequeno { max-width: 460px; }
 .dialogo-pequeno p { line-height: 1.5; color: var(--suave); }
 .dialogo-fijo { text-align: center; padding: 28px 32px 30px; }
+.dialogo-fijo:focus-visible { outline: none; }
 .dialogo-fijo::backdrop { background: rgba(0,0,0,.78); }
 .dialogo-fijo h2 { font-size: 20px; margin-bottom: 8px; color: var(--texto); }
 .act-sub { margin-bottom: 18px; font-size: 15px; }

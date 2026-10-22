@@ -97,10 +97,13 @@ def crear_app(proyecto: Proyecto) -> FastAPI:
         if ruta is None:
             raise HTTPException(400, "cual debe ser entrada, salida o ejemplos")
         ruta.mkdir(parents=True, exist_ok=True)
-        if sys.platform == "win32":
-            os.startfile(ruta)  # noqa: S606 - abre el Explorador en la carpeta
-        else:
-            subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", str(ruta)])
+        try:
+            if sys.platform == "win32":
+                os.startfile(ruta)  # noqa: S606 - abre el Explorador en la carpeta
+            else:
+                subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", str(ruta)])
+        except OSError as e:
+            raise HTTPException(500, f"No se ha podido abrir la carpeta ({e}). Esta en: {ruta}") from e
         return {"ruta": str(ruta)}
 
     @app.post("/api/salir")

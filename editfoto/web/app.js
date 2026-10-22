@@ -925,6 +925,63 @@ async function restablecer() {
   } catch (e) { /* aviso ya mostrado */ }
 }
 
+/* ---- giro de 90 grados (detalle y rejilla) ---- */
+
+/** Icono de flecha curva (sentido -1 = izquierda, 1 = derecha), clonado de las plantillas del HTML. */
+function iconoGiro(sentido) {
+  return $(sentido < 0 ? '#tpl-giro-izq' : '#tpl-giro-der').content.firstElementChild.cloneNode(true);
+}
+
+function botonGiro(sentido, clase) {
+  const texto = sentido < 0 ? 'Girar a la izquierda' : 'Girar a la derecha';
+  return crear('button', { type: 'button', class: clase, 'data-sentido': String(sentido), title: texto, 'aria-label': texto }, iconoGiro(sentido));
+}
+
+function marcarGirando(id, delta) {
+  const n = (S.girando.get(id) || 0) + delta;
+  if (n > 0) S.girando.set(id, n);
+  else S.girando.delete(id);
+  const f = S.porId.get(id);
+  if (f) tarjetaActualizar(f);
+  if (S.vista === 'detalle' && S.id === id) pintarCabeceraDetalle();
+}
+
+/** Gira la foto 90 grados: sentido 1 = horario (derecha), -1 = antihorario (izquierda). */
+async function girar(id, sentido) {
+  const f = S.porId.get(id);
+  if (!f || S.cerrada) return;
+  if (!f.analizada && modeloBloquea()) {
+    avisar('El modelo de IA aún se está descargando: no se puede girar una foto sin analizar todavía.');
+    return;
+  }
+  const enDetalle = S.vista === 'detalle' && S.id === id;
+  if (enDetalle && P.id === id && P.historia.length) {
+    const ok = await confirmar('Tienes trazos de pincel sin aplicar en esta foto. Si la giras, se perderán.', {
+      titulo: 'Trazos sin aplicar',
+      si: 'Girar y descartar',
+      no: 'Seguir pintando',
+    });
+    if (!ok) return;
+  }
+  marcarGirando(id, 1);
+  try {
+    if (enDetalle) {
+      await vaciarCambios(); // los ajustes pendientes de los deslizadores van antes del giro
+      const seq = ++D.seq;
+      await encolar(async () => {
+        const g = guardarFoto(await api('POST', `/api/fotos/${id}/girar`, { sentido }));
+        if (P.id === id && P.giro !== giroDe(g)) pintorLimpiar(); // se descartan trazos, capas y máscara antiguos
+        if (esVigente(id, seq)) await actualizarVisor();
+        return g;
+      }, 'Girando la foto...');
+    } else {
+      guardarFoto(await api('POST', `/api/fotos/${id}/girar`, { sentido }));
+    }
+  } catch (e) { /* aviso ya mostrado */ } finally {
+    marcarGirando(id, -1);
+  }
+}
+
 async function cambiarPresetFoto(nombre) {
   const f = fotoActual();
   if (!f || nombre === f.preset) return;
@@ -1013,6 +1070,7 @@ function pintarInfo() {
     ['Ampliación', info.escala != null ? num(info.escala, 2) + 'x' : '-'],
     ['Tiempo de render', info.segundos != null ? num(info.segundos, 1) + ' s' : '-'],
     ['Imagen de trabajo', f.ancho ? `${f.ancho} x ${f.alto}` : 'sin analizar'],
+    ['Giro', ['ninguno', '90° a la derecha', '180°', '90° a la izquierda'][giroDe(f) % 4]],
   ];
   $('#info-foto').replaceChildren(...filas.flatMap(([k, v]) => [crear('dt', { texto: k }), crear('dd', { texto: String(v) })]));
   const e = $('#info-error');
@@ -1020,16 +1078,35 @@ function pintarInfo() {
   e.textContent = f.error || '';
 }
 
+function botonProcesarFoto(f, texto, textoOcupado) {
+  const b = crear('button', {
+    type: 'button',
+    class: 'btn primario',
+    'data-procesar-foto': '1',
+    onclick: () => {
+      if (modeloBloquea()) {
+        avisar(TEXTO_ESPERA_MODELO);
+        return;
+      }
+      enviarRender(f.id, {}, textoOcupado).catch(() => {});
+    },
+    texto,
+  });
+  b.disabled = modeloBloquea();
+  if (b.disabled) b.title = TEXTO_ESPERA_MODELO;
+  return b;
+}
+
 function mensajeResultado(contenedor, f, compacto) {
   contenedor.replaceChildren();
   if (f.estado === 'error') {
     contenedor.append(crear('strong', { texto: 'No se ha podido procesar esta foto.' }));
     if (f.error && !compacto) contenedor.append(crear('div', { class: 'aviso-error', texto: f.error }));
-    contenedor.append(crear('button', { type: 'button', class: 'btn primario', onclick: () => enviarRender(f.id, {}).catch(() => {}), texto: 'Reintentar' }));
+    contenedor.append(botonProcesarFoto(f, 'Reintentar', undefined));
   } else {
     contenedor.append(crear('strong', { texto: 'Esta foto todavía no está procesada.' }));
     if (!compacto) contenedor.append(crear('span', { texto: 'Pulsa el botón para pasarle la IA ahora (tarda unos segundos), o usa "Procesar pendientes" en la rejilla.' }));
-    contenedor.append(crear('button', { type: 'button', class: 'btn primario', onclick: () => enviarRender(f.id, {}, 'Procesando la foto...').catch(() => {}), texto: 'Procesar esta foto' }));
+    contenedor.append(botonProcesarFoto(f, 'Procesar esta foto', 'Procesando la foto...'));
   }
 }
 
@@ -1054,7 +1131,7 @@ async function actualizarVisor() {
     await mostrarResultadoEn($('#img-resultado'), $('#msg-resultado'), f, false);
   } else if (S.modo === 'antes') {
     await Promise.all([
-      ponerImagen($('#img-antes'), `/img/${id}/original?max=1600`),
+      ponerImagen($('#img-antes'), urlOriginal(f, 1600)),
       mostrarResultadoEn($('#img-despues'), $('#msg-despues'), f, true),
     ]);
   } else {
@@ -1165,6 +1242,7 @@ const TIPOS = [
 
 const P = {
   id: null,
+  giro: null, // giro90 de la foto cuando se cargo la imagen
   token: 0,
   listo: false,
   W: 0,
@@ -1310,6 +1388,7 @@ function copiaCanvas(origen) {
 function pintorLimpiar() {
   P.token++;
   P.id = null;
+  P.giro = null;
   P.listo = false;
   P.capas = {};
   P.historia = [];
@@ -1327,6 +1406,7 @@ function pintorLimpiar() {
 }
 
 async function pintorEntrar(f) {
+  if (P.id === f.id && P.giro !== giroDe(f)) pintorLimpiar(); // la foto se ha girado: ancho, alto y capas son otros
   if (P.id === f.id && P.listo) {
     if (P.ajustado) ajustarVista();
     else aplicarVista();
@@ -1339,7 +1419,8 @@ async function pintorEntrar(f) {
   P.id = f.id;
   const token = P.token;
   const img = $('#pintor-img');
-  const ok = await ponerImagen(img, `/img/${f.id}/original`);
+  P.giro = giroDe(f);
+  const ok = await ponerImagen(img, urlOriginal(S.porId.get(f.id) || f));
   if (token !== P.token) return;
   if (!ok) {
     P.id = null;
@@ -1361,6 +1442,7 @@ async function pintorEntrar(f) {
     }
   }
   P.listo = true;
+  mc.hidden = !P.mascara;
   ajustarVista();
   herramientasActualizar();
   if (P.mascara) cargarMascara();
@@ -1781,11 +1863,13 @@ function construirFormPreset() {
         continue;
       }
       fs.append(crear('label', { class: 'campo', for: id }, c.et, ctrl));
+      if (c.r === 'fondo.imagen') fs.append(crear('p', { class: 'ayuda', id: 'pf-fondo-nota', hidden: true }));
     }
     cont.append(fs);
   }
   const tipoFondo = $('#pf-fondo-tipo');
   tipoFondo.addEventListener('change', fondoAjustarCampos);
+  $('#pf-fondo-imagen').addEventListener('input', fondoAjustarCampos);
   $('#form-preset').addEventListener('input', () => marcarPresetSucio(true));
   $('#form-preset').addEventListener('change', () => marcarPresetSucio(true));
 }
@@ -1795,6 +1879,12 @@ function fondoAjustarCampos() {
   $('#pf-fondo-color').disabled = t !== 'color';
   $('#pf-fondo-color-hex').disabled = t !== 'color';
   $('#pf-fondo-imagen').disabled = t !== 'imagen';
+  const nota = $('#pf-fondo-nota');
+  const ruta = $('#pf-fondo-imagen').value.trim();
+  nota.hidden = t !== 'imagen';
+  nota.textContent = ruta
+    ? `Este preset usa como fondo la imagen "${ruta}" (la ruta es relativa a la carpeta de datos de EDITFOTO, Documentos\\EDITFOTO). Aquí no se muestra una vista previa.`
+    : 'Este preset usa una imagen de fondo, pero todavía no has indicado su ruta.';
 }
 
 function marcarPresetSucio(v) {
@@ -1918,35 +2008,354 @@ async function presetCrear(ev) {
 async function presetAprender(ev) {
   ev.preventDefault();
   const nombre = nombreValido($('#aprender-nombre').value);
-  if (!nombre) {
-    avisar('Escribe un nombre para el preset que se va a aprender.', 'error');
+  if ($('#aprender-nombre').value.trim() && !nombre) {
+    avisar('Ese nombre no es válido: usa letras, números o guiones bajos.', 'error');
     return;
   }
-  const cuerpo = { nombre, base: $('#aprender-base').value || 'generico' };
+  const cuerpo = {};
+  if (nombre) {
+    cuerpo.nombre = nombre;
+    cuerpo.base = $('#aprender-base').value || 'generico';
+  }
   const carpeta = $('#aprender-carpeta').value.trim();
   if (carpeta) cuerpo.carpeta = carpeta;
   const boton = $('#aprender-boton');
   boton.disabled = true;
-  $('#aprender-estado').textContent = 'Analizando las fotos de ejemplo... tarda unos segundos por foto.';
+  $('#aprender-ocupado').hidden = false;
+  $('#aprender-estado').textContent = '';
   $('#aprender-resumen').hidden = true;
   try {
     const r = await api('POST', '/api/aprender', cuerpo);
     const resumen = r.resumen || {};
     const lineas = Array.isArray(resumen.texto) ? resumen.texto : [String(resumen.texto || '')];
-    $('#aprender-resumen').textContent = (resumen.ejemplos != null ? `Fotos de ejemplo analizadas: ${resumen.ejemplos}\n` : '') + lineas.join('\n');
+    $('#aprender-resumen').textContent = lineas.join('\n');
     $('#aprender-resumen').hidden = false;
-    $('#aprender-estado').textContent = `Preset "${(r.preset && r.preset.nombre) || nombre}" creado.`;
+    const nuevos = (Array.isArray(r.presets) && r.presets.length ? r.presets : r.preset ? [r.preset] : []).filter(Boolean);
+    const nombres = nuevos.map((p) => p.nombre);
+    $('#aprender-estado').textContent = nombres.length === 1
+      ? `Preset "${nombres[0]}" creado.`
+      : `${nombres.length} presets creados: ${nombres.join(', ')}.`;
+    for (const n of nombres) S.cachePresets.delete(n);
     await cargarPresets();
-    PV.nombre = (r.preset && r.preset.nombre) || nombre;
-    PV.sucio = false;
-    pintarListaPresets();
-    rellenarFormPreset(r.preset);
+    if (nuevos.length) {
+      PV.nombre = nuevos[0].nombre;
+      PV.sucio = false;
+      pintarListaPresets();
+      rellenarFormPreset(nuevos[0]);
+    }
     $('#aprender-resumen').scrollIntoView({ block: 'nearest' });
   } catch (e) {
     $('#aprender-estado').textContent = '';
   } finally {
     boton.disabled = false;
+    $('#aprender-ocupado').hidden = true;
   }
+}
+
+/* ---------------------------------------------------------------------
+   App de escritorio: versión, modelos, actualización, novedades, carpetas, salir
+   --------------------------------------------------------------------- */
+
+const quitarV = (v) => String(v == null ? '' : v).replace(/^v/i, '');
+
+function pintarVersion(v) {
+  const el = $('#version');
+  const limpia = quitarV(v);
+  el.hidden = !limpia;
+  if (limpia) el.textContent = 'v' + limpia;
+}
+
+/* ---- descarga de los modelos de IA (primera vez) ---- */
+
+const TEXTO_ESPERA_MODELO = 'Espera a que termine la descarga del modelo de IA (solo la primera vez): hasta entonces no se pueden procesar fotos.';
+
+/** Mientras falte el modelo de recorte (birefnet_lite) no se puede analizar ninguna foto. */
+function modeloBloquea() {
+  const m = S.modelos;
+  return !!(m && !m.listos && Array.isArray(m.faltan) && m.faltan.includes('birefnet_lite'));
+}
+
+function actualizarBotonesLote() {
+  const activo = !!S.progreso.activo;
+  const bloquea = modeloBloquea();
+  for (const [id, titulo] of [
+    ['#btn-procesar', 'Procesa todas las fotos pendientes con la IA'],
+    ['#btn-rehacer', 'Vuelve a procesar todas las fotos, también las que ya están listas'],
+  ]) {
+    const b = $(id);
+    b.disabled = activo || bloquea;
+    b.title = bloquea ? TEXTO_ESPERA_MODELO : titulo;
+  }
+  // Los botones "Procesar esta foto" / "Reintentar" del detalle siguen el mismo criterio.
+  for (const b of $$('[data-procesar-foto]')) {
+    b.disabled = bloquea;
+    if (bloquea) b.title = TEXTO_ESPERA_MODELO;
+    else b.removeAttribute('title');
+  }
+}
+
+const mb = (bytes) => num(bytes / 1048576, 0);
+
+function pintarModelos(m) {
+  S.modelos = m;
+  const franja = $('#franja-modelos');
+  franja.hidden = !!m.listos;
+  if (!m.listos) {
+    const sub = $('#modelos-sub');
+    const barra = $('#modelos-barra');
+    if (m.error) {
+      franja.classList.add('error');
+      $('#modelos-texto').textContent = 'No se han podido descargar los modelos de IA: ' + m.error;
+      sub.textContent = 'Comprueba tu conexión y vuelve a abrir EDITFOTO.';
+      sub.hidden = false;
+    } else {
+      franja.classList.remove('error');
+      const total = Number(m.total) || 0;
+      const hecho = Number(m.hecho) || 0;
+      const pct = total > 0 ? limitar(Math.floor((100 * hecho) / total), 0, 100) : 0;
+      const partes = [];
+      const desc = m.descripcion || m.modelo || '';
+      if (desc) partes.push(desc);
+      if (total > 0) partes.push(`${pct} % (${mb(hecho)} de ${mb(total)} MB)`);
+      $('#modelos-texto').textContent =
+        'Descargando los modelos de IA (solo la primera vez)' + (partes.length ? ': ' + partes.join(', ') : '...');
+      const puedeProcesar = !modeloBloquea();
+      sub.textContent = puedeProcesar ? 'Ya puedes procesar fotos; el modelo grande sigue bajando.' : '';
+      sub.hidden = !puedeProcesar;
+      $('#modelos-relleno').style.width = pct + '%';
+      barra.setAttribute('aria-valuenow', String(pct));
+    }
+  }
+  actualizarBotonesLote();
+}
+
+async function vigilarModelos() {
+  let fallos = 0;
+  while (!S.cerrada) {
+    let m = null;
+    try {
+      m = await api('GET', '/api/modelos', undefined, { silencioso: true });
+      fallos = 0;
+    } catch (e) {
+      if (e.estado === 404 || ++fallos >= 30) return; // servidor sin esa ruta, o sin servidor
+    }
+    if (m) {
+      pintarModelos(m);
+      if (m.listos) return;
+    }
+    await esperar(1000);
+  }
+}
+
+/* ---- actualización automática ---- */
+
+const U = { fase: null, bloquea: false };
+
+function pintarActualizacion(a) {
+  U.fase = a.fase;
+  pintarVersion(a.version_actual || (S.estado && S.estado.version));
+  $('#franja-actualizacion').hidden = a.fase !== 'esperando';
+  const dlg = $('#dlg-actualizacion');
+  U.bloquea = ['detectada', 'descargando', 'instalando'].includes(a.fase);
+  if (!U.bloquea) {
+    if (dlg.open) dlg.close();
+    return;
+  }
+  const v = quitarV(a.version);
+  $('#act-titulo').textContent = 'Actualización disponible' + (v ? ': v' + v : '');
+  const barra = $('#act-barra');
+  const descargando = a.fase === 'descargando';
+  const pct = limitar(Math.round(Number(a.progreso) || 0), 0, 100);
+  barra.hidden = !descargando;
+  $('#act-spinner').hidden = descargando;
+  if (descargando) {
+    $('#act-sub').textContent = `Descargando... ${pct} %`;
+    $('#act-relleno').style.width = pct + '%';
+    barra.setAttribute('aria-valuenow', String(pct));
+  } else if (a.fase === 'instalando') {
+    $('#act-sub').textContent = 'Instalando: EDITFOTO se reinicia solo';
+  } else {
+    $('#act-sub').textContent = 'Preparando la descarga...';
+  }
+  if (!dlg.open) dlg.showModal();
+}
+
+/** Consulta /api/actualizacion cada segundo (máx. 40 s si no hay nada que hacer). */
+async function vigilarActualizacion() {
+  const t0 = Date.now();
+  let quieto = null;
+  let caido = false;
+  while (!S.cerrada) {
+    let a = null;
+    try {
+      a = await api('GET', '/api/actualizacion', undefined, { silencioso: true });
+    } catch (e) {
+      if (e.estado === 404) return;
+      caido = true;
+    }
+    if (a) {
+      if (caido && U.fase === 'instalando') {
+        location.reload(); // la app ha vuelto a arrancar con la versión nueva
+        return;
+      }
+      caido = false;
+      pintarActualizacion(a);
+      const fase = a.fase;
+      if (fase === 'al_dia' || fase === 'desarrollo') return;
+      if (fase === 'error') {
+        avisar(a.mensaje || 'No se ha podido comprobar si hay una versión nueva.');
+        return;
+      }
+      if (fase === 'inactivo') {
+        if (quieto == null) quieto = Date.now();
+        if (Date.now() - quieto >= 5000) return;
+      } else {
+        quieto = null;
+      }
+    }
+    // Con una versión en camino se sigue vigilando; si no hay nada, el límite es de 40 s.
+    const enCamino = ['detectada', 'descargando', 'esperando', 'instalando'].includes(U.fase);
+    if (!enCamino && Date.now() - t0 >= 40000) return;
+    await esperar(1000);
+  }
+}
+
+/* ---- novedades de la versión ---- */
+
+/** Trozos de texto con **negrita**, sin innerHTML. */
+function enLinea(texto) {
+  const partes = texto.split('**');
+  if (partes.length % 2 === 0) partes.splice(-2, 2, partes.slice(-2).join('**')); // ** sin cerrar: se deja como texto
+  return partes.map((t, i) => (i % 2 ? crear('strong', { texto: t }) : t)).filter((n) => n !== '');
+}
+
+/** Markdown sencillo: "## título", "- elemento", "**negrita**" y párrafos. Devuelve nodos del DOM. */
+function markdownSencillo(md) {
+  const salida = [];
+  let lista = null;
+  let parrafo = [];
+  const cerrarParrafo = () => {
+    if (parrafo.length) salida.push(crear('p', {}, ...enLinea(parrafo.join(' '))));
+    parrafo = [];
+  };
+  for (const cruda of String(md).split(/\r?\n/)) {
+    const l = cruda.trim();
+    let m;
+    if (!l) {
+      cerrarParrafo();
+      lista = null;
+    } else if ((m = /^#{1,6}\s+(.*)$/.exec(l))) {
+      cerrarParrafo();
+      lista = null;
+      salida.push(crear('h3', {}, ...enLinea(m[1])));
+    } else if ((m = /^[-*]\s+(.*)$/.exec(l))) {
+      cerrarParrafo();
+      if (!lista) {
+        lista = crear('ul');
+        salida.push(lista);
+      }
+      lista.append(crear('li', {}, ...enLinea(m[1])));
+    } else {
+      lista = null;
+      parrafo.push(l);
+    }
+  }
+  cerrarParrafo();
+  return salida;
+}
+
+async function cargarNovedades() {
+  let n;
+  try {
+    n = await api('GET', '/api/novedades', undefined, { silencioso: true });
+  } catch (e) {
+    return;
+  }
+  if (!n || !n.notas) return;
+  const v = quitarV(n.version);
+  $('#novedades-titulo').textContent = 'Novedades de la versión' + (v ? ' v' + v : '');
+  $('#novedades-cuerpo').replaceChildren(...markdownSencillo(n.notas));
+  const dlg = $('#dlg-novedades');
+  if (!dlg.open) dlg.showModal();
+  $('#novedades-ok').focus();
+}
+
+/* ---- carpetas ---- */
+
+const menuAbierto = () => !$('#menu-carpetas').hidden;
+
+function abrirMenuCarpetas() {
+  const rutas = (S.estado && { entrada: S.estado.entrada, salida: S.estado.salida, ejemplos: S.estado.ejemplos }) || {};
+  for (const b of $$('#menu-carpetas .menu-op')) {
+    const ruta = rutas[b.dataset.cual];
+    if (ruta) b.title = ruta;
+    else b.removeAttribute('title');
+  }
+  $('#menu-carpetas').hidden = false;
+  $('#btn-carpetas').setAttribute('aria-expanded', 'true');
+  $('#menu-carpetas .menu-op').focus();
+}
+
+function cerrarMenuCarpetas(devolverFoco) {
+  if (!menuAbierto()) return;
+  $('#menu-carpetas').hidden = true;
+  $('#btn-carpetas').setAttribute('aria-expanded', 'false');
+  if (devolverFoco) $('#btn-carpetas').focus();
+}
+
+function menuTeclado(e) {
+  const ops = $$('#menu-carpetas .menu-op');
+  const i = ops.indexOf(document.activeElement);
+  let destino = null;
+  if (e.key === 'ArrowDown') destino = ops[(i + 1) % ops.length];
+  else if (e.key === 'ArrowUp') destino = ops[(i - 1 + ops.length) % ops.length];
+  else if (e.key === 'Home') destino = ops[0];
+  else if (e.key === 'End') destino = ops[ops.length - 1];
+  else if (e.key === 'Tab') cerrarMenuCarpetas(false);
+  if (destino) {
+    e.preventDefault();
+    destino.focus();
+  }
+}
+
+async function abrirCarpeta(cual) {
+  try {
+    const r = await api('POST', '/api/abrir_carpeta', { cual }, { silencioso: true });
+    avisar('Carpeta abierta' + (r && r.ruta ? ': ' + r.ruta : '.'), 'ok');
+  } catch (e) {
+    // El mensaje del servidor puede ser técnico: se da la ruta para abrirla a mano.
+    const ruta = S.estado && S.estado[cual];
+    avisar('No se ha podido abrir la carpeta automáticamente.' + (ruta ? ' Ábrela a mano: ' + ruta : ''), 'error');
+  }
+}
+
+/* ---- salir ---- */
+
+async function salir() {
+  try {
+    S.progreso = await api('GET', '/api/progreso', undefined, { silencioso: true });
+  } catch (e) { /* se usa lo último que se sabía */ }
+  const avisos = [];
+  if (S.progreso.activo) {
+    avisos.push(`Hay un procesado en marcha (${S.progreso.hechas} de ${S.progreso.total} fotos). Si sales ahora, se para y las que falten se quedarán sin procesar.`);
+  }
+  if (P.id && P.historia.length) avisos.push('Tienes trazos de pincel sin aplicar: se perderán.');
+  if (PV.sucio) avisos.push('Tienes cambios sin guardar en un preset: se perderán.');
+  if (avisos.length) {
+    const ok = await confirmar(avisos.join(' '), { titulo: 'Salir de EDITFOTO', si: 'Salir de todos modos', no: 'Seguir en EDITFOTO' });
+    if (!ok) return;
+  }
+  try {
+    await api('POST', '/api/salir');
+  } catch (e) {
+    return;
+  }
+  S.cerrada = true;
+  P.historia = [];
+  PV.sucio = false;
+  U.bloquea = false;
+  for (const d of $$('dialog[open]')) if (d.id !== 'dlg-cerrada') d.close();
+  $('#dlg-cerrada').showModal();
 }
 
 /* ---------------------------------------------------------------------
@@ -1979,6 +2388,10 @@ document.addEventListener('keydown', (e) => {
   if (dialogoAbierto) return;
 
   if (e.key === 'Escape') {
+    if (menuAbierto()) {
+      cerrarMenuCarpetas(true);
+      return;
+    }
     if (S.vista === 'detalle') navegar('#');
     return;
   }
@@ -2007,6 +2420,12 @@ document.addEventListener('keydown', (e) => {
       if (e.repeat) return;
       e.preventDefault();
       aprobarYSiguiente();
+      break;
+    case 'r':
+    case 'R':
+      if (e.repeat || e.altKey) return;
+      e.preventDefault();
+      girar(S.id, e.shiftKey ? -1 : 1);
       break;
     case '1': ponerModo('resultado'); break;
     case '2': ponerModo('antes'); break;
@@ -2068,6 +2487,12 @@ function enlazarEventos() {
   const rejilla = $('#rejilla');
   rejilla.addEventListener('click', (e) => {
     if (e.target.closest('.casilla')) return;
+    const g = e.target.closest('.giro');
+    if (g) {
+      e.stopPropagation();
+      girar(g.closest('.tarjeta').dataset.id, Number(g.dataset.sentido));
+      return;
+    }
     const t = e.target.closest('.tarjeta');
     if (t) navegar('#foto/' + t.dataset.id);
   });
@@ -2096,6 +2521,31 @@ function enlazarEventos() {
   $('#form-preset').addEventListener('submit', presetGuardar);
   $('#form-nuevo').addEventListener('submit', presetCrear);
   $('#form-aprender').addEventListener('submit', presetAprender);
+  $('#aprender-abrir').addEventListener('click', () => abrirCarpeta('ejemplos'));
+
+  $('#d-girar-izq').append(iconoGiro(-1));
+  $('#d-girar-der').append(iconoGiro(1));
+  $('#d-girar-izq').addEventListener('click', () => girar(S.id, -1));
+  $('#d-girar-der').addEventListener('click', () => girar(S.id, 1));
+
+  $('#btn-carpetas').addEventListener('click', () => (menuAbierto() ? cerrarMenuCarpetas(true) : abrirMenuCarpetas()));
+  $('#menu-carpetas').addEventListener('keydown', menuTeclado);
+  $$('#menu-carpetas .menu-op').forEach((b) =>
+    b.addEventListener('click', () => {
+      cerrarMenuCarpetas(false);
+      abrirCarpeta(b.dataset.cual);
+    })
+  );
+  document.addEventListener('click', (e) => {
+    if (menuAbierto() && !e.target.closest('.menu-caja')) cerrarMenuCarpetas(false);
+  });
+  $('#btn-salir').addEventListener('click', salir);
+  const dlgAct = $('#dlg-actualizacion');
+  dlgAct.addEventListener('cancel', (e) => e.preventDefault()); // sin cierre: la app se reinicia sola
+  dlgAct.addEventListener('close', () => { if (U.bloquea && !S.cerrada) dlgAct.showModal(); });
+  const dlgFin = $('#dlg-cerrada');
+  dlgFin.addEventListener('cancel', (e) => e.preventDefault());
+  dlgFin.addEventListener('close', () => { if (S.cerrada) dlgFin.showModal(); });
 
   window.addEventListener('hashchange', aplicarRuta);
   window.addEventListener('beforeunload', (e) => {
@@ -2124,10 +2574,15 @@ async function iniciar() {
   const modo = almacen.leer('modo', 'resultado');
   S.modo = modo === 'antes' ? 'antes' : 'resultado'; // al abrir una foto no se arranca en Pintar
 
+  // Lo propio de la app de escritorio arranca ya, sin esperar a la rejilla.
+  vigilarModelos();
+  vigilarActualizacion();
+
   await Promise.all([cargarEstado().catch(() => {}), cargarPresets().catch(() => {}), cargarFotos().catch(() => {})]);
   rejillaSincronizar();
   actualizarContador();
   await aplicarRuta();
+  cargarNovedades();
 
   try {
     S.progreso = await api('GET', '/api/progreso', undefined, { silencioso: true });
