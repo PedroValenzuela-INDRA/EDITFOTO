@@ -64,13 +64,39 @@ def redirigir_salida() -> Path:
     if sys.stdout is not None and sys.stderr is not None and not getattr(sys, "frozen", False):
         return registro
     registro.parent.mkdir(parents=True, exist_ok=True)
-    if registro.exists() and registro.stat().st_size > 5 * 1024 * 1024:
-        registro.replace(registro.with_suffix(".anterior.txt"))
-    f = open(registro, "a", encoding="utf-8", buffering=1)
+    try:
+        if registro.exists() and registro.stat().st_size > 5 * 1024 * 1024:
+            registro.replace(registro.with_suffix(".anterior.txt"))
+    except OSError:
+        pass  # otro proceso lo tiene abierto: se sigue escribiendo en el mismo
+    try:
+        f = open(registro, "a", encoding="utf-8", buffering=1)
+    except OSError:
+        f = open(os.devnull, "w", encoding="utf-8")
     f.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} =====\n")
     sys.stdout = f
     sys.stderr = f
     return registro
+
+
+_candado = None  # se mantiene mientras viva el proceso
+
+
+def _ya_abierta() -> bool:
+    """True si otra copia de EDITFOTO ya se esta ejecutando (candado con nombre de Windows)."""
+    global _candado
+    if sys.platform != "win32":
+        return False
+    import ctypes
+
+    kernel32 = ctypes.windll.kernel32
+    kernel32.CreateMutexW.restype = ctypes.c_void_p
+    _candado = kernel32.CreateMutexW(None, False, "Local\\EDITFOTO_instancia_unica")
+    return kernel32.GetLastError() == 183  # ERROR_ALREADY_EXISTS
+
+
+def _fichero_puerto() -> Path:
+    return carpeta_local() / "puerto.txt"
 
 
 def _servidor_existente(puerto: int) -> bool:
@@ -251,8 +277,19 @@ def main(argv=None) -> None:
     registro = redirigir_salida()
     actualizador.limpiar_restos()
 
-    if _servidor_existente(PUERTO):  # ya estaba abierta: otra ventana sobre la misma app
-        abrir_ventana(f"http://127.0.0.1:{PUERTO}")
+    if _ya_abierta():
+        # Ya hay una EDITFOTO (quiza aun arrancando): se espera a su servidor y se abre otra
+        # ventana sobre la misma app, en vez de un segundo servidor sobre los mismos ficheros.
+        for _ in range(240):
+            try:
+                puerto = int(_fichero_puerto().read_text().strip())
+            except (OSError, ValueError):
+                puerto = PUERTO
+            if _servidor_existente(puerto):
+                abrir_ventana(f"http://127.0.0.1:{puerto}")
+                return
+            time.sleep(0.5)
+        print("Otra EDITFOTO parece abierta pero no responde.", flush=True)
         return
 
     from . import modelos
@@ -263,6 +300,10 @@ def main(argv=None) -> None:
     print(f"EDITFOTO {actualizador.ver.__version__} | datos: {datos} | registro: {registro}", flush=True)
     servidor, app = arrancar_servidor(datos / "fotos" / "entrada", datos / "fotos" / "salida", _puerto_libre(PUERTO))
     app.state.salir = lambda: os._exit(0)
+    try:
+        _fichero_puerto().write_text(str(servidor.config.port))
+    except OSError:
+        pass
     modelos.preparar_en_segundo_plano()
 
     def al_abrir():

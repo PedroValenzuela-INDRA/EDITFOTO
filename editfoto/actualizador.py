@@ -173,6 +173,18 @@ def aplicar_y_reiniciar(exe_nuevo: Path) -> None:
     os._exit(0)
 
 
+def _anotar(texto: str) -> None:
+    """Linea en el registro de la app. El modo aplicador corre antes de que exista otro registro."""
+    try:
+        base = os.environ.get("LOCALAPPDATA") if sys.platform == "win32" else os.path.expanduser("~/.local/share")
+        ruta = Path(base or os.path.expanduser("~")) / "EDITFOTO" / "registro.txt"
+        ruta.parent.mkdir(parents=True, exist_ok=True)
+        with open(ruta, "a", encoding="utf-8") as f:
+            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} [actualizacion] {texto}\n")
+    except OSError:
+        pass
+
+
 def modo_aplicar_si_toca(argv=None) -> None:
     """Si este proceso es el '<nombre>.new.exe' lanzado con --apply-update, hace el cambio y
     termina (no retorna). Llamar al principio, antes de abrir ventanas."""
@@ -193,10 +205,11 @@ def modo_aplicar_si_toca(argv=None) -> None:
             break
         except OSError:
             time.sleep(0.4)  # el exe viejo aun no ha soltado el fichero
+    _anotar(f"{'Instalada' if copiado else 'NO se pudo instalar'} la version {ver.__version__} en {destino}")
     try:
         _lanzar_desacoplado([destino], destino.parent)
-    except OSError:
-        pass
+    except OSError as e:
+        _anotar(f"No se pudo relanzar {destino}: {e}")
     os._exit(0 if copiado else 1)
 
 
@@ -247,6 +260,7 @@ def comprobar_y_actualizar(trabajo_activo=lambda: False) -> None:
             ESTADO.update(fase="esperando", mensaje="Se instalara al terminar el procesado")
             time.sleep(2)
         ESTADO.update(fase="instalando", progreso=100)
+        _anotar(f"Descargada la version {info.version}; se reinicia para instalarla")
         time.sleep(1.8)
         aplicar_y_reiniciar(ruta)
     except Exception as e:  # noqa: BLE001 - nunca impedir que la app arranque
