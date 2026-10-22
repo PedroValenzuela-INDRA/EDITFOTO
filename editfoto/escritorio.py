@@ -250,6 +250,19 @@ def autoprueba(ruta_resultado: str | None) -> int:
         res, datos = pipeline.renderizar(img, alfa, preset, None, capas, None, None)
         assert res.shape[:2] == (preset["lienzo"]["alto"], preset["lienzo"]["ancho"])
         info["render"] = f"ok ({datos.get('segundos', '-')})"
+
+        # Aprender el fondo usa funciones de OpenCV (alineacion ECC, relleno) que no usa el resto.
+        from . import fondos
+
+        yy, xx = np.mgrid[0:300, 0:400].astype(np.float32)
+        suelo = np.dstack([0.5 + 0.2 * np.sin(xx / 9 + yy / 40)] * 3).astype(np.float32)
+        tapas = [np.zeros((300, 400), bool) for _ in range(3)]
+        for k, t in enumerate(tapas):
+            t[80:220, 60 + 90 * k:200 + 90 * k] = True
+        placa, datos_fondo = fondos.reconstruir([suelo.copy() for _ in tapas], tapas)
+        assert placa.shape == suelo.shape and np.isfinite(placa).all()
+        assert datos_fondo["alineadas"] == 2, f"la alineacion de fondos no funciona: {datos_fondo}"
+        info["fondo"] = f"ok ({datos_fondo['alineadas']} alineadas, relleno {datos_fondo['relleno']})"
         return info
 
     paso("imports", _imports)

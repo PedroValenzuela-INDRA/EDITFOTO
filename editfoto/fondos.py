@@ -43,34 +43,52 @@ def _gris_sin_prenda(img: np.ndarray, zona_fondo: np.ndarray, tam: tuple[int, in
     return cv2.GaussianBlur(g8.astype(np.float32) / 255.0, (0, 0), 1.0), z
 
 
+def _ecc(g_ref, z_ref, g_img, z_img, M, tipo):
+    criterio = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100, 1e-5)
+    if hasattr(cv2, "findTransformECCWithMask"):  # OpenCV 5: ignora la prenda en las dos fotos
+        return cv2.findTransformECCWithMask(g_ref, g_img, z_ref.astype(np.uint8), z_img.astype(np.uint8),
+                                            M, tipo, criterio, 3)[1]
+    return cv2.findTransformECC(g_ref, g_img, M, tipo, criterio, z_img.astype(np.uint8), 3)[1]
+
+
+def _sensata(M: np.ndarray, h: int, w: int) -> bool:
+    """Una camara movida a mano: poco giro, casi sin cambio de escala ni deformacion."""
+    A = M[:, :2]
+    escala = np.sqrt(abs(np.linalg.det(A)))
+    deformacion = abs(A[0, 0] - A[1, 1]) + abs(A[0, 1] + A[1, 0])
+    return 0.9 < escala < 1.1 and deformacion < 0.08 and np.abs(M[:, 2]).max() < 0.1 * max(h, w)
+
+
 def _alinear(ref: np.ndarray, ref_fondo: np.ndarray, img: np.ndarray, fondo: np.ndarray):
     """Alinea img con ref usando solo el fondo (ECC de grueso a fino). Devuelve (img, fondo, ok).
 
     Primero a muy baja resolucion, donde un dibujo repetitivo (vetas de madera, cuadros de
-    una tela) no engana, y despues se afina con mas detalle."""
+    una tela) no engana, y despues se afina con mas detalle. Si un nivel fino da un resultado
+    absurdo, se queda el del nivel anterior."""
     h, w = ref.shape[:2]
+    niveles = [lado for lado in (160, 320, 640) if lado < max(h, w)] or [max(h, w)]
     M = np.eye(2, 3, dtype=np.float32)
-    criterio = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100, 1e-5)
-    for nivel, lado in enumerate((160, 320, 640)):
+    for nivel, lado in enumerate(niveles):
         e = lado / max(h, w)
         tam = (max(1, round(w * e)), max(1, round(h * e)))
-        g_ref, _ = _gris_sin_prenda(ref, ref_fondo, tam)
+        g_ref, z_ref = _gris_sin_prenda(ref, ref_fondo, tam)
         g_img, z_img = _gris_sin_prenda(img, fondo, tam)
         Me = M.copy()
         Me[:, 2] *= e
         tipo = cv2.MOTION_TRANSLATION if nivel == 0 else cv2.MOTION_AFFINE
         try:
-            _, Me = cv2.findTransformECC(g_ref, g_img, Me, tipo, criterio, z_img.astype(np.uint8), 3)
+            Me = _ecc(g_ref, z_ref, g_img, z_img, Me, tipo)
         except cv2.error:
             if nivel == 0:
                 return img, fondo, False
-            break  # se queda con la estimacion del nivel anterior
-        M = Me.copy()
-        M[:, 2] /= e
-    escala = np.sqrt(abs(np.linalg.det(M[:, :2])))
-    desplazamiento = np.abs(M[:, 2]).max() / max(h, w)
-    if not (0.9 < escala < 1.1 and desplazamiento < 0.1):  # alineacion sospechosa: mejor no tocar
-        return img, fondo, False
+            break
+        candidata = Me.copy()
+        candidata[:, 2] /= e
+        if not _sensata(candidata, h, w):
+            if nivel == 0:
+                return img, fondo, False
+            break
+        M = candidata
     img_a = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP,
                            borderMode=cv2.BORDER_REFLECT_101)
     fondo_a = cv2.warpAffine(fondo.astype(np.uint8), M, (w, h), flags=cv2.INTER_NEAREST | cv2.WARP_INVERSE_MAP,

@@ -121,3 +121,15 @@ def test_foto_del_fondo_vacio_tiene_prioridad(tmp_path, monkeypatch, sin_lama):
                            {"fondo": [0.5, 0.4, 0.3], "fondo_uniforme": False}) for k in range(3)]
     cambios, frase, info = aprender.aprender_fondo(ej, raiz, "mi_fondo", avisar=lambda *_: None)
     assert info["origen"] == "foto_vacia" and cambios["tipo"] == "imagen" and "fondo.jpg" in frase
+
+
+def test_fotos_pequenas_e_identicas_se_alinean_sin_moverse(sin_lama):
+    """Regresion: con fotos pequenas, el nivel fino ampliaba la imagen y la alineacion divergia."""
+    yy, xx = np.mgrid[0:300, 0:400].astype(np.float32)
+    suelo = np.dstack([0.5 + 0.2 * np.sin(xx / 9 + yy / 40)] * 3).astype(np.float32)
+    tapas = [np.zeros((300, 400), bool) for _ in range(3)]
+    for k, t in enumerate(tapas):
+        t[80:220, 60 + 90 * k:200 + 90 * k] = True
+    placa, info = fondos.reconstruir([suelo.copy() for _ in tapas], tapas)
+    assert info["alineadas"] == 2
+    assert np.abs(placa - suelo).mean() < 0.002
