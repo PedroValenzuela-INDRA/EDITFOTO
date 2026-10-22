@@ -11,6 +11,7 @@
 
 <header id="cabecera" class="cabecera">
   <a class="marca" href="#" id="marca" title="Volver a la rejilla">EDITFOTO</a>
+  <span id="version" class="version" title="Versión instalada" hidden></span>
   <span id="insignia" class="insignia" title="Acelerador que usa la IA" hidden></span>
   <nav class="pestanas" aria-label="Secciones">
     <button type="button" id="tab-fotos" class="pestana activa">Fotos</button>
@@ -22,8 +23,31 @@
     <button type="button" id="btn-cancelar" class="btn peligro pequeno">Cancelar</button>
   </div>
   <span class="espaciador"></span>
+  <div class="menu-caja">
+    <button type="button" id="btn-carpetas" class="btn" aria-haspopup="menu" aria-expanded="false" aria-controls="menu-carpetas" title="Abrir una de las carpetas de EDITFOTO en el Explorador">Carpetas <span class="flecha" aria-hidden="true">&#9662;</span></button>
+    <div id="menu-carpetas" class="menu" role="menu" aria-label="Carpetas de EDITFOTO" hidden>
+      <button type="button" role="menuitem" class="menu-op" data-cual="entrada">Fotos para editar (entrada)</button>
+      <button type="button" role="menuitem" class="menu-op" data-cual="salida">Fotos editadas (salida)</button>
+      <button type="button" role="menuitem" class="menu-op" data-cual="ejemplos">Fotos de ejemplo</button>
+    </div>
+  </div>
   <button type="button" id="btn-ayuda" class="btn icono" title="Atajos de teclado (tecla ?)" aria-label="Ayuda de atajos">?</button>
+  <button type="button" id="btn-salir" class="btn" title="Cerrar EDITFOTO" hidden>Salir</button>
 </header>
+
+<!-- Franjas informativas bajo la barra superior -->
+<div id="franja-modelos" class="franja" hidden>
+  <div class="franja-cuerpo">
+    <span id="modelos-texto" class="franja-texto"></span>
+    <span id="modelos-sub" class="franja-sub" hidden></span>
+  </div>
+  <div id="modelos-barra" class="barra franja-barra" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Descarga de los modelos de IA"><div id="modelos-relleno" class="barra-relleno"></div></div>
+</div>
+<div id="franja-actualizacion" class="franja" hidden>
+  <div class="franja-cuerpo">
+    <span class="franja-texto">Hay una versión nueva lista; se instalará al terminar el procesado.</span>
+  </div>
+</div>
 
 <section id="barra-lote" class="barra-herramientas" aria-label="Procesado por lotes">
   <label class="campo-en-linea">Preset del lote
@@ -70,6 +94,10 @@
           <button type="button" role="tab" data-modo="resultado" class="modo activa">Resultado <kbd>1</kbd></button>
           <button type="button" role="tab" data-modo="antes" class="modo">Antes / Después <kbd>2</kbd></button>
           <button type="button" role="tab" data-modo="pintar" class="modo">Pintar <kbd>3</kbd></button>
+        </div>
+        <div class="grupo-girar" role="group" aria-label="Girar la foto 90 grados">
+          <button type="button" id="d-girar-izq" class="btn icono-g" title="Girar 90° a la izquierda (Mayús+R)" aria-label="Girar a la izquierda"></button>
+          <button type="button" id="d-girar-der" class="btn icono-g" title="Girar 90° a la derecha (R)" aria-label="Girar a la derecha"></button>
         </div>
         <span class="espaciador"></span>
         <button type="button" id="d-ant" class="btn" title="Foto anterior (flecha izquierda)">&larr; Anterior</button>
@@ -165,7 +193,7 @@
       </div>
 
       <section class="bloque acciones-panel">
-        <button type="button" id="btn-restablecer" class="btn" title="Quita todos los ajustes de esta foto">Restablecer</button>
+        <button type="button" id="btn-restablecer" class="btn" title="Quita todos los ajustes de esta foto (el giro de 90° se conserva)">Restablecer</button>
         <button type="button" id="btn-guardar-preset" class="btn" title="Guarda los ajustes de retoque y color en el preset de esta foto">Guardar estos ajustes en el preset</button>
         <p class="ayuda">Guardar en el preset solo recoge arrugas, color y nitidez; la rotación, el tamaño y el movimiento son propios de cada foto.</p>
       </section>
@@ -210,20 +238,24 @@
 
       <form id="form-aprender" class="bloque" autocomplete="off">
         <h3>Aprender de mis fotos favoritas</h3>
-        <p class="ayuda">Mide el encuadre, el fondo y la sombra de tus fotos de ejemplo y crea un preset que las imita.</p>
+        <p class="ayuda">Mide el encuadre, el fondo y la sombra de tus fotos de ejemplo y crea presets que las imitan. Organiza la carpeta de ejemplos con una subcarpeta por tipo de prenda (sudadera, pantalón, jersey...), cada una con de 5 a 20 fotos que te gusten.</p>
+        <p class="ayuda">Si puedes, añade una foto del fondo vacío llamada <code>fondo.jpg</code> para que el fondo salga exacto.</p>
         <div class="campos-fila">
           <label class="campo">Carpeta con las fotos de ejemplo
-            <input type="text" id="aprender-carpeta" placeholder="vacío = fotos/ejemplos">
+            <input type="text" id="aprender-carpeta" placeholder="vacío = la carpeta de fotos de ejemplo de EDITFOTO">
           </label>
-          <label class="campo">Nombre del preset
-            <input type="text" id="aprender-nombre" placeholder="por ejemplo: mi_estilo" required maxlength="40">
+          <label class="campo">Nombre del preset (opcional)
+            <input type="text" id="aprender-nombre" placeholder="vacío = un preset por subcarpeta" maxlength="40" aria-describedby="aprender-nombre-ayuda">
           </label>
-          <label class="campo">Partir de
+          <label class="campo">Partir de (solo si pones nombre)
             <select id="aprender-base"></select>
           </label>
         </div>
+        <p id="aprender-nombre-ayuda" class="ayuda">Déjalo vacío para crear un preset por cada subcarpeta (sudadera, pantalón, jersey...).</p>
         <div class="fila-botones">
           <button type="submit" id="aprender-boton" class="btn primario">Aprender</button>
+          <button type="button" id="aprender-abrir" class="btn">Abrir la carpeta de ejemplos</button>
+          <span id="aprender-ocupado" class="indicador" role="status" hidden><span class="spinner" aria-hidden="true"></span><span>Aprendiendo de tus fotos... puede tardar un minuto o más.</span></span>
           <span id="aprender-estado" class="tenue" role="status"></span>
         </div>
         <pre id="aprender-resumen" class="resumen" hidden></pre>
@@ -244,6 +276,8 @@
           <dt><kbd>A</kbd></dt><dd>Aprobar y pasar a la siguiente</dd>
           <dt><kbd>Esc</kbd></dt><dd>Volver a la rejilla</dd>
           <dt><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></dt><dd>Resultado, Antes / Después, Pintar</dd>
+          <dt><kbd>R</kbd></dt><dd>Girar la foto 90° a la derecha</dd>
+          <dt><kbd>Mayús</kbd>+<kbd>R</kbd></dt><dd>Girar la foto 90° a la izquierda</dd>
         </dl>
       </div>
       <div><h3>Modo Pintar</h3>
@@ -263,6 +297,11 @@
           <dt><kbd>?</kbd></dt><dd>Abrir o cerrar esta ayuda</dd>
         </dl>
       </div>
+      <div><h3>En la rejilla</h3>
+        <dl>
+          <dt>Pasar el ratón</dt><dd>Aparecen los botones de girar 90° a la izquierda y a la derecha</dd>
+        </dl>
+      </div>
     </div>
     <div class="dialogo-botones"><button class="btn primario" value="cerrar">Cerrar</button></div>
   </form>
@@ -279,6 +318,32 @@
     </div>
   </form>
 </dialog>
+
+<!-- Novedades de la version -->
+<dialog id="dlg-novedades" class="dialogo dialogo-notas" aria-labelledby="novedades-titulo">
+  <form method="dialog">
+    <h2 id="novedades-titulo">Novedades</h2>
+    <div id="novedades-cuerpo" class="notas"></div>
+    <div class="dialogo-botones"><button class="btn primario" value="ok" id="novedades-ok">Entendido</button></div>
+  </form>
+</dialog>
+
+<!-- Actualizacion: capa a pantalla completa sin boton de cierre (la app se reinicia sola) -->
+<dialog id="dlg-actualizacion" class="dialogo dialogo-pequeno dialogo-fijo" aria-labelledby="act-titulo" aria-describedby="act-sub">
+  <h2 id="act-titulo">Actualización disponible</h2>
+  <p id="act-sub" class="act-sub"></p>
+  <div id="act-barra" class="barra barra-grande" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Progreso de la descarga" hidden><div id="act-relleno" class="barra-relleno"></div></div>
+  <span id="act-spinner" class="spinner spinner-grande" aria-hidden="true" hidden></span>
+</dialog>
+
+<!-- Tras pulsar Salir -->
+<dialog id="dlg-cerrada" class="dialogo dialogo-pequeno dialogo-fijo">
+  <p class="cerrada-texto">EDITFOTO se ha cerrado. Ya puedes cerrar esta ventana.</p>
+</dialog>
+
+<!-- Iconos de giro (se clonan desde el JS) -->
+<template id="tpl-giro-izq"><svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg></template>
+<template id="tpl-giro-der"><svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></template>
 
 <div id="avisos" class="avisos" aria-live="assertive" aria-atomic="false"></div>
 

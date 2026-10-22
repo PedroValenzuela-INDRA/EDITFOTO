@@ -3,7 +3,8 @@
 /* =====================================================================
    EDITFOTO - interfaz web local (JavaScript puro, sin dependencias)
    Secciones: utilidades, API y avisos, estado, rejilla, procesado por
-   lotes, detalle, pintor, presets, teclado y arranque.
+   lotes, detalle (con giro de 90 grados), pintor, presets, app de escritorio
+   (modelos, actualizacion, novedades, carpetas, salir), teclado y arranque.
    ===================================================================== */
 
 /* ---------------------------------------------------------------------
@@ -131,7 +132,7 @@ async function api(metodo, url, cuerpo, { silencioso = false } = {}) {
     r = await fetch(url, opc);
   } catch (e) {
     const msg = 'No se puede conectar con EDITFOTO. Comprueba que el programa sigue abierto.';
-    if (!silencioso) avisar(msg, 'error');
+    if (!silencioso && !S.cerrada) avisar(msg, 'error');
     throw new ErrorApi(msg, 0);
   }
   if (!r.ok) {
@@ -191,6 +192,9 @@ const S = {
   vigilando: false,
   trabajoVisto: false,
   scrollRejilla: 0,
+  girando: new Map(), // id -> giros en curso (rejilla y detalle)
+  modelos: null, // ultima respuesta de /api/modelos
+  cerrada: false, // true tras pulsar Salir: se dejan de consultar cosas
 };
 
 const FILTROS = {
@@ -215,6 +219,9 @@ async function cargarEstado() {
   S.estado = await api('GET', '/api/estado');
   pintarInsignia();
   $('#marca').title = `Fotos de entrada: ${S.estado.entrada}\nFotos editadas: ${S.estado.salida}`;
+  pintarVersion(S.estado.version);
+  $('#btn-salir').hidden = !S.estado.exe;
+  $('#aprender-carpeta').placeholder = S.estado.ejemplos ? 'vacío = ' + S.estado.ejemplos : 'vacío = la carpeta de fotos de ejemplo de EDITFOTO';
 }
 
 async function cargarPresets() {
@@ -256,6 +263,12 @@ function rellenarSelectores() {
    --------------------------------------------------------------------- */
 
 let cargasImg = 0;
+
+/** Cuartos de vuelta horarios que lleva la foto (ajustes.giro90, de 0 a 3). */
+const giroDe = (f) => Number((f && f.ajustes && f.ajustes.giro90) || 0) || 0;
+
+/** URL de la imagen original de trabajo. El ?v= cambia con el giro para que se recargue al girar. */
+const urlOriginal = (f, max) => `/img/${f.id}/original?` + (max ? `max=${max}&` : '') + `v=${giroDe(f)}`;
 
 function ponerImagen(img, url) {
   if (img._url === url && img._promesa) return img._promesa;
@@ -363,6 +376,12 @@ function crearTarjeta(f) {
     crear('label', { class: 'casilla', title: 'Aprobada' }, crear('input', { type: 'checkbox', 'aria-label': 'Foto aprobada' })),
     crear(
       'div',
+      { class: 'giros' },
+      botonGiro(-1, 'giro'),
+      botonGiro(1, 'giro')
+    ),
+    crear(
+      'div',
       { class: 'datos' },
       crear('div', { class: 'nombre' }),
       crear('div', { class: 'meta' }, crear('span', { class: 'chip' }), crear('span', { class: 'insignia-estado' })),
@@ -373,9 +392,10 @@ function crearTarjeta(f) {
   img.addEventListener('load', () => img.parentElement.classList.remove('sin-vista'));
   img.addEventListener('error', () => {
     // Si falla la miniatura del resultado, se prueba con la del original.
-    if (img.dataset.clave && img.dataset.clave !== 'o') {
-      img.dataset.clave = 'o';
-      img.src = `/img/${f.id}/miniatura/original`;
+    const actual = S.porId.get(f.id) || f;
+    if (img.dataset.clave && img.dataset.clave[0] !== 'o') {
+      img.dataset.clave = 'o' + giroDe(actual);
+      img.src = `/img/${f.id}/miniatura/original?v=${giroDe(actual)}`;
     } else {
       img.parentElement.classList.add('sin-vista');
     }
@@ -386,6 +406,7 @@ function crearTarjeta(f) {
 
 function estadoVisible(f) {
   const trabajando = S.progreso.activo && S.progreso.actual === f.id;
+  if (S.girando.has(f.id)) return ['procesando', 'Girando'];
   if (trabajando) return ['procesando', 'Procesando'];
   if (f.estado === 'error') return ['error', 'Error'];
   if (f.estado === 'lista') return f.aprobada ? ['aprobada', 'Aprobada'] : ['lista', 'Lista'];
@@ -395,16 +416,16 @@ function estadoVisible(f) {
 function tarjetaActualizar(f) {
   const t = tarjetas.get(f.id) || crearTarjeta(f);
   const lista = f.estado === 'lista';
-  const trabajando = S.progreso.activo && S.progreso.actual === f.id;
+  const trabajando = (S.progreso.activo && S.progreso.actual === f.id) || S.girando.has(f.id);
   t.classList.toggle('aprobada', !!f.aprobada);
   t.classList.toggle('sin-resultado', !lista);
   t.classList.toggle('procesando', trabajando);
   t.classList.toggle('reciente', S.vista === 'rejilla' && S.ultimo === f.id);
   const img = $('img', t);
-  const clave = lista ? 'r' + f.version : 'o';
+  const clave = lista ? 'r' + f.version : 'o' + giroDe(f);
   if (img.dataset.clave !== clave) {
     img.dataset.clave = clave;
-    img.src = lista ? `/img/${f.id}/miniatura/resultado?v=${f.version}` : `/img/${f.id}/miniatura/original`;
+    img.src = lista ? `/img/${f.id}/miniatura/resultado?v=${f.version}` : `/img/${f.id}/miniatura/original?v=${giroDe(f)}`;
   }
   const nombre = $('.nombre', t);
   nombre.textContent = '';
@@ -452,12 +473,27 @@ function rejillaVacia() {
   const hay = visibles().length;
   v.hidden = hay > 0;
   if (hay > 0) return;
+  const entrada = S.estado ? S.estado.entrada : '';
+  const clave = S.fotos.length === 0 ? 'sin-fotos|' + entrada : 'filtro';
+  if (v.dataset.clave === clave && v.children.length) return; // ya está pintado: no se pierde el foco
+  v.dataset.clave = clave;
   v.replaceChildren();
   if (S.fotos.length === 0) {
-    const entrada = S.estado ? S.estado.entrada : '';
     v.append(
-      crear('h2', { texto: 'No hay fotos todavía' }),
-      crear('p', {}, 'Copia tus fotos a la carpeta de entrada ', crear('code', { texto: entrada }), ' y pulsa "Recargar carpeta".')
+      crear('h2', { texto: 'Copia aquí las fotos del día' }),
+      entrada
+        ? crear('p', {}, 'Carpeta de entrada: ', crear('code', { texto: entrada }))
+        : crear('p', { texto: 'Copia las fotos a la carpeta de entrada de EDITFOTO.' }),
+      crear(
+        'div',
+        { class: 'vacio-botones' },
+        crear('button', { type: 'button', class: 'btn primario', onclick: () => abrirCarpeta('entrada'), texto: 'Abrir la carpeta de entrada' }),
+        crear('button', { type: 'button', class: 'btn', onclick: recargarCarpeta, texto: 'Recargar carpeta' })
+      ),
+      crear('p', {
+        class: 'ayuda',
+        texto: 'Si las pones en subcarpetas llamadas como un preset (sudadera, pantalón, jersey...), cada una usa su preset.',
+      })
     );
   } else {
     v.append(crear('p', { texto: 'Ninguna foto cumple el filtro elegido.' }));
@@ -515,8 +551,7 @@ async function fijarAprobada(id, valor) {
 function pintarProgreso() {
   const p = S.progreso;
   $('#progreso').hidden = !p.activo;
-  $('#btn-procesar').disabled = p.activo;
-  $('#btn-rehacer').disabled = p.activo;
+  actualizarBotonesLote();
   const cancelar = $('#btn-cancelar');
   if (!p.activo) {
     cancelar.disabled = false;
@@ -534,7 +569,7 @@ function pintarProgreso() {
   for (const f of S.fotos) {
     const t = tarjetas.get(f.id);
     if (!t) continue;
-    const trabajando = p.activo && p.actual === f.id;
+    const trabajando = (p.activo && p.actual === f.id) || S.girando.has(f.id);
     if (t.classList.contains('procesando') !== trabajando) tarjetaActualizar(f);
   }
 }
@@ -552,7 +587,7 @@ async function vigilarProgreso() {
         fallos = 0;
       } catch (e) {
         if (++fallos >= 5) {
-          avisar('Se ha perdido la conexión con EDITFOTO.', 'error');
+          if (!S.cerrada) avisar('Se ha perdido la conexión con EDITFOTO.', 'error');
           S.progreso.activo = false;
           break;
         }
@@ -584,6 +619,10 @@ async function vigilarProgreso() {
 }
 
 async function procesar(forzar) {
+  if (modeloBloquea()) {
+    avisar(TEXTO_ESPERA_MODELO);
+    return;
+  }
   const pendientes = S.fotos.filter((f) => f.estado !== 'lista').length;
   if (!forzar && pendientes === 0) {
     avisar('No hay fotos pendientes de procesar.');
