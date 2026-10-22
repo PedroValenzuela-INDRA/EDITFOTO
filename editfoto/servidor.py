@@ -182,6 +182,12 @@ def crear_app(proyecto: Proyecto) -> FastAPI:
         proyecto.quitar_pincel(id_, tipo)
         return foto_json(id_)
 
+    @app.post("/api/fotos/{id_}/girar")
+    def girar(id_: str, datos: dict = Body(...)):
+        buscar(id_)
+        proyecto.girar(id_, int(datos.get("sentido", 1)))
+        return foto_json(id_)
+
     @app.post("/api/fotos/{id_}/aprobar")
     def aprobar(id_: str, datos: dict = Body(...)):
         buscar(id_)

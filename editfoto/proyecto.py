@@ -129,12 +129,19 @@ class Proyecto:
     def preset_de(self, f: Foto) -> dict:
         return config.fusionar(config.cargar_preset(f.preset), f.ajustes.get("preset"))
 
+    @staticmethod
+    def giro(f: Foto) -> int:
+        """Cuartos de vuelta en sentido horario que el usuario ha girado la foto (0 a 3)."""
+        return int(f.ajustes.get("giro90", 0)) % 4
+
     def _imagen(self, f: Foto, preset: dict) -> np.ndarray:
-        clave = (f.id, int(preset["salida"]["max_lado_trabajo"]))
+        clave = (f.id, int(preset["salida"]["max_lado_trabajo"]), self.giro(f))
         if clave in self._cache:
             self._cache.move_to_end(clave)
             return self._cache[clave]
         img = pipeline.cargar_trabajo(self.entrada / f.ruta, preset)
+        if self.giro(f):
+            img = np.ascontiguousarray(np.rot90(img, -self.giro(f)))
         self._cache[clave] = img
         while len(self._cache) > 6:
             self._cache.popitem(last=False)
@@ -213,7 +220,35 @@ class Proyecto:
                     raise ValueError(f"No existe el preset {preset}")
                 f.preset = preset
             if ajustes is not None:
+                # El giro de 90 grados es de la foto, no un ajuste: solo lo cambia girar(),
+                # que gira tambien el recorte y los pinceles. Restablecer no lo deshace.
+                giro = self.giro(f)
+                ajustes = {k: v for k, v in ajustes.items() if k != "giro90"}
                 f.ajustes = ajustes if reemplazar else config.fusionar(f.ajustes, ajustes)
+                if giro:
+                    f.ajustes["giro90"] = giro
+            self._guardar_estado(f)
+            return self.renderizar(id_)
+
+    def girar(self, id_: str, sentido: int) -> Foto:
+        """Gira la foto 90 grados (1 = horario, -1 = antihorario) y lo recuerda.
+
+        El recorte de la IA y las capas de pincel se giran con ella, asi no hay que
+        volver a analizar ni se descuadra nada de lo ya pintado."""
+        if sentido not in (1, -1):
+            raise ValueError("sentido debe ser 1 (horario) o -1 (antihorario)")
+        with self.cerrojo:
+            f = self.foto(id_)
+            d = self._dir(id_)
+            for ruta in [d / "alfa.png"] + [d / f"pincel_{t}.png" for t in TIPOS_PINCEL]:
+                if ruta.exists():
+                    with Image.open(ruta) as im:
+                        girada = im.transpose(Image.Transpose.ROTATE_270 if sentido == 1 else Image.Transpose.ROTATE_90)
+                    girada.save(ruta)
+            (d / "mini_original.jpg").unlink(missing_ok=True)  # se regenera ya girada
+            f.ajustes["giro90"] = (self.giro(f) + sentido) % 4
+            if f.ancho and f.alto:
+                f.ancho, f.alto = f.alto, f.ancho
             self._guardar_estado(f)
             return self.renderizar(id_)
 

@@ -286,3 +286,45 @@ def test_presets_propios_sobreviven_a_una_actualizacion(tmp_path, monkeypatch):
     assert config.cargar_preset("sudadera")["arrugas"]["fuerza"] == 0.93
     assert config.cargar_preset("pantalon")["arrugas"]["escala"] == 0.12  # del programa
     assert {"mi_estilo", "abrigo", "sudadera"} <= set(config.listar_presets())
+
+
+def test_giro_de_90_grados_se_conserva(tmp_path, ia_falsa):
+    from fastapi.testclient import TestClient
+
+    from editfoto.proyecto import Proyecto
+    from editfoto.servidor import crear_app
+
+    entrada = tmp_path / "entrada"
+    entrada.mkdir()
+    img, alfa, _ = foto_sintetica()
+    tumbada = np.ascontiguousarray(np.rot90(img, 1))  # foto que llega girada
+    imagen.guardar_jpg(tumbada, entrada / "tumbada.jpg", 95)
+    ia_falsa(imagen.cargar(entrada / "tumbada.jpg"), np.ascontiguousarray(np.rot90(alfa, 1)))
+    p = Proyecto(entrada, tmp_path / "salida")
+    c = TestClient(crear_app(p))
+    f = c.post("/api/fotos/tumbada/render", json={}).json()
+    assert (f["ancho"], f["alto"]) == (900, 1200)
+
+    # Un trazo de pincel en la esquina superior izquierda de la foto tumbada.
+    capa = Image.new("L", (900, 1200), 0)
+    capa.paste(255, (0, 0, 100, 50))
+    buf = io.BytesIO()
+    capa.save(buf, "PNG")
+    c.put("/api/fotos/tumbada/pincel/proteger", content=buf.getvalue(), headers={"content-type": "image/png"})
+
+    f = c.post("/api/fotos/tumbada/girar", json={"sentido": 1}).json()
+    assert f["ajustes"]["giro90"] == 1 and (f["ancho"], f["alto"]) == (1200, 900) and f["estado"] == "lista"
+    # La foto de trabajo ya esta derecha y el pincel ha girado con ella (ahora arriba a la derecha).
+    assert np.abs(p.imagen_trabajo("tumbada") - img).mean() < 0.02
+    girada = np.asarray(Image.open(p.ruta_pincel("tumbada", "proteger")))
+    assert girada.shape == (900, 1200) and girada[:100, -50:].mean() > 200 and girada[:100, :50].mean() < 5
+
+    # Restablecer los ajustes no deshace el giro, y se conserva al reabrir la app.
+    c.post("/api/fotos/tumbada/render", json={"ajustes": {"giro90": 3, "rotacion": 4}})
+    f = c.post("/api/fotos/tumbada/render", json={"ajustes": {}, "reemplazar": True}).json()
+    assert f["ajustes"] == {"giro90": 1}
+    assert Proyecto(entrada, tmp_path / "salida").foto("tumbada").ajustes["giro90"] == 1
+    # Cuatro giros a la derecha vuelven al principio.
+    for _ in range(3):
+        f = c.post("/api/fotos/tumbada/girar", json={"sentido": 1}).json()
+    assert f["ajustes"]["giro90"] == 0 and (f["ancho"], f["alto"]) == (900, 1200)

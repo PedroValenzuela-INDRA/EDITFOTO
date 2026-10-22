@@ -62,6 +62,15 @@ Las respuestas son JSON salvo las rutas `/img/...`. Errores: codigo HTTP 4xx/5xx
   - El PNG puede ser de cualquier tamano (se reescala a ancho x alto de trabajo). Cuenta como pintado el canal alfa si el PNG tiene transparencia, si no el blanco. Un PNG vacio borra la capa.
 - `DELETE /api/fotos/{id}/pincel/{tipo}` -> borra la capa y rehace -> Foto
 - `POST /api/fotos/{id}/aprobar` body `{aprobada: bool}` -> Foto
+- `POST /api/fotos/{id}/girar` body `{sentido: 1 | -1}` -> gira la foto 90 grados (1 = horario, -1 = antihorario), con su recorte y sus pinceles, y la rehace -> Foto. Se guarda en `ajustes.giro90` (0 a 3 cuartos de vuelta horarios) y se conserva: "Restablecer" no lo deshace y `render` ignora `giro90` si se lo mandan. Tras girar cambian `ancho`/`alto` y hay que recargar `/img/{id}/original` y las capas de pincel.
+
+### App de escritorio (EDITFOTO.exe)
+- `GET /api/estado` incluye ademas `app: "EDITFOTO"`, `exe: bool` (true dentro del .exe) y las rutas `entrada`, `salida`, `ejemplos`.
+- `GET /api/modelos` -> `{listos: bool, faltan: [nombres], activa: bool, modelo, descripcion, hecho, total, error}`. La primera vez la app descarga los modelos en segundo plano (hasta ~1,3 GB): mientras `listos` sea false, ensena el progreso (`hecho`/`total` en bytes). Se puede procesar en cuanto `faltan` no incluya `birefnet_lite`. Si `error` no es null, ensenalo.
+- `GET /api/actualizacion` -> `{fase, version, progreso, mensaje, version_actual}`. `fase`: `inactivo`, `desarrollo`, `buscando`, `al_dia`, `detectada`, `descargando` (`progreso` 0-100), `esperando` (se instalara al acabar el lote), `instalando` (la app se reinicia sola en 2 s), `error` (`mensaje`; la app sigue funcionando).
+- `GET /api/novedades` -> `{version, notas}` (markdown) solo la primera vez tras actualizarse; si no, `{}`.
+- `POST /api/abrir_carpeta` body `{cual: "entrada" | "salida" | "ejemplos"}` -> abre esa carpeta en el Explorador -> `{ruta}`.
+- `POST /api/salir` -> cierra la app (solo en el .exe; 400 fuera de el).
 
 ### Lotes
 - `POST /api/procesar` body `{ids?: [..], forzar?: bool, preset?: "nombre"}` -> arranca en segundo plano (sin `ids`: todas las pendientes; con `forzar`: rehace tambien las listas; con `preset`: se lo asigna antes). 409 si ya hay uno en marcha.
