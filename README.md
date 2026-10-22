@@ -29,45 +29,69 @@ Por eso aquí la IA solo hace dos cosas que no tocan la prenda: **recortar** y *
 
 ## Instalación (Windows)
 
+La forma normal es descargar **EDITFOTO.exe** de la última versión publicada en [EDITFOTO-Releases](https://github.com/PedroValenzuela-INDRA/EDITFOTO-Releases/releases) y abrirlo con doble clic. No hace falta instalar Python.
+
+- **Aviso de Windows (SmartScreen)**: la primera vez, Windows puede mostrar "Windows protegió su PC". Pulsa **Más información** y después **Ejecutar de todas formas**. Como el programa no tiene firma digital, algún antivirus también puede marcarlo por error.
+- **Primera vez**: descarga los modelos de IA, unos 400 MB, o unos 1,3 GB si hay tarjeta gráfica (añade el modelo de recorte completo, más preciso). El progreso se ve en pantalla.
+- **Actualizaciones**: al abrirlo comprueba si hay una versión nueva, la descarga, se reinicia sola y enseña las novedades.
+- **Tus datos**: las fotos y los presets están en `Documentos\EDITFOTO`, y las actualizaciones no los tocan. Los modelos de IA y el registro de la app (`registro.txt`) están en `%LOCALAPPDATA%\EDITFOTO`.
+
+### Instalación para desarrollo
+
+Para trabajar con el código en vez de usar el .exe:
+
 1. Instala **Python 3.12** desde [python.org](https://www.python.org/downloads/). Durante la instalación marca **"Add python.exe to PATH"**.
-2. Descarga esta carpeta (botón verde "Code" > "Download ZIP" en GitHub) y descomprímela donde quieras.
+2. Descarga el código (botón verde "Code" > "Download ZIP" en GitHub) y descomprímelo donde quieras.
 3. Doble clic en **`instalar.bat`**. Te preguntará qué tarjeta gráfica tienes:
    - **NVIDIA**: la opción más rápida.
    - **AMD, Intel o no lo sé**: DirectML, funciona con cualquier tarjeta gráfica moderna.
    - **Solo CPU**: funciona en cualquier PC, más lento.
-4. La primera vez descarga los modelos de IA: unos 400 MB, o unos 1.350 MB si detecta tarjeta gráfica (añade el modelo de recorte completo, más preciso).
+
+   Después descarga los modelos de IA, lo que puede tardar varios minutos.
+4. Doble clic en **`iniciar.bat`**: arranca el servidor local y se abre la aplicación en el navegador.
 
 En Linux o Mac: `./instalar.sh` y luego `./iniciar.sh`.
 
 ## Uso diario
 
-1. Copia las fotos del día en `fotos/entrada/`. Si las separas en subcarpetas con el nombre de un preset, cada una usa su preset automáticamente:
+1. Copia las fotos del día en `Documentos\EDITFOTO\fotos\entrada\`. La app tiene botones para abrir las carpetas de entrada, salida y ejemplos. Si las separas en subcarpetas con el nombre de un preset, cada una usa su preset automáticamente:
    ```
-   fotos/entrada/sudadera/IMG_001.jpg
-   fotos/entrada/pantalon/IMG_014.jpg
-   fotos/entrada/jersey/IMG_027.jpg
+   Documentos\EDITFOTO\fotos\entrada\sudadera\IMG_001.jpg
+   Documentos\EDITFOTO\fotos\entrada\pantalon\IMG_014.jpg
+   Documentos\EDITFOTO\fotos\entrada\jersey\IMG_027.jpg
    ```
    Las fotos que estén sueltas usan el preset `generico`. Valen JPG, PNG, WEBP y HEIC del iPhone.
-2. Doble clic en **`iniciar.bat`**: se abre el navegador con la aplicación.
+2. Abre **EDITFOTO.exe** con doble clic. Se abre la aplicación en su propia ventana.
 3. Pulsa **Procesar pendientes**. Primero pasa la IA por todas (la parte lenta) y luego aplica el resto.
 4. Revisa: abre cada foto, ajusta si hace falta (arrugas, brillo, giro, tamaño, pinceles) y apruébala con la tecla **A** (pasa a la siguiente).
-5. Las fotos terminadas están en `fotos/salida/`, con la misma estructura de carpetas.
+5. Las fotos terminadas están en `Documentos\EDITFOTO\fotos\salida\`, con la misma estructura de carpetas.
 
-Si no quieres revisar, **`procesar_todo.bat`** procesa todo sin abrir el navegador.
+En la instalación para desarrollo, **`procesar_todo.bat`** procesa todo sin abrir la interfaz.
 
 Los retoques se guardan: puedes cerrar y volver otro día, o cambiar un ajuste y rehacer una foto en un par de segundos sin volver a pasar la IA.
 
 ## Presets: tu estilo por tipo de prenda
 
-Un preset guarda cómo quieres que quede un tipo de prenda: tamaño de la foto final, cuánto ocupa la prenda y dónde, color o imagen de fondo, sombra, fuerza del suavizado de arrugas, enderezado y nitidez. Vienen `generico`, `sudadera`, `pantalon`, `jersey`, `camiseta` y `calzado`, y se editan desde la pestaña **Presets** de la aplicación (se guardan en `presets/*.json`).
+Un preset guarda cómo quieres que quede un tipo de prenda: tamaño de la foto final, cuánto ocupa la prenda y dónde, color o imagen de fondo, sombra, fuerza del suavizado de arrugas, enderezado y nitidez. Vienen `generico`, `sudadera`, `pantalon`, `jersey`, `camiseta` y `calzado`, y se editan desde la pestaña **Presets** de la aplicación. Los que vienen de fábrica se actualizan con la app; los que creas o cambias tú se guardan en `Documentos\EDITFOTO\presets` y tienen prioridad.
 
-Si un ajuste te gusta para una foto concreta, el botón **Guardar estos ajustes en el preset** lo convierte en el nuevo valor por defecto. Para borrar un preset, borra su fichero en `presets/`.
+Si un ajuste te gusta para una foto concreta, el botón **Guardar estos ajustes en el preset** lo convierte en el nuevo valor por defecto. Para borrar un preset tuyo, borra su fichero en `Documentos\EDITFOTO\presets`.
 
 ### Aprender de tus fotos favoritas
 
-Pon de 5 a 15 fotos ya editadas que te gusten en `fotos/ejemplos/` y, desde la pestaña Presets (o con `python -m editfoto aprender --nombre mi_estilo`), se crea un preset que copia su estilo: proporción de la foto, cuánto ocupa la prenda, dónde queda, color de fondo e intensidad de la sombra.
+Organiza tus fotos favoritas ya editadas en `Documentos\EDITFOTO\fotos\ejemplos`, una subcarpeta por tipo de prenda, y pulsa **Aprender** en la pestaña Presets:
 
-No es un entrenamiento de IA, no hace falta: el estilo de una foto de producto se reduce a esas medidas. Se ha comprobado pasándole fotos generadas con valores conocidos (prenda al 84 %, centrada, fondo #F4F4F2, sombra 0,22): recupera el encuadre y el fondo exactos y la sombra con 0,21.
+```
+ejemplos\fondo.jpg          opcional: una foto del fondo vacío (así el fondo sale exacto)
+ejemplos\sudadera\...       de 5 a 20 fotos que te gusten
+ejemplos\pantalon\...
+ejemplos\jersey\...
+```
+
+Cada subcarpeta crea o actualiza el preset con su nombre, copiando su estilo: proporción de la foto, cuánto ocupa la prenda, dónde queda e intensidad de la sombra. Además **aprende tu fondo real**: si es liso, su color; si tiene textura (madera, tela...), lo reconstruye combinando los ejemplos. En cada foto la prenda tapa una zona distinta del fondo, así que se alinean las fotos (por si la cámara se movió), se igualan de luz y se toma, píxel a píxel, lo que se ve de fondo. Lo que ninguna foto deja ver lo rellena la IA, y de todas formas queda debajo de la prenda nueva.
+
+No es un entrenamiento de IA, no hace falta: el estilo de una foto de producto se reduce a esas medidas y a ese fondo. Se ha comprobado con fotos generadas con valores conocidos: recupera el encuadre exacto, la sombra con un error de 0,01 y un fondo de madera con un error medio del 0,1 %, a partir de 8 fotos movidas entre sí hasta unos 20 píxeles.
+
+Lo que no puede aprender es **cómo doblas la ropa**: eso es físico. Cambiarlo en la foto sería redibujar la prenda, justo lo que no queremos en Vinted.
 
 ## Velocidad
 
@@ -115,7 +139,7 @@ Hay un documento con la API del servidor local en [`docs/API.md`](docs/API.md).
 ```
 python -m editfoto servidor   [--entrada fotos/entrada] [--salida fotos/salida] [--preset generico] [--abrir]
 python -m editfoto procesar   [--entrada ...] [--salida ...] [--preset sudadera] [--forzar]
-python -m editfoto aprender   --nombre mi_estilo [--ejemplos fotos/ejemplos] [--base sudadera]
+python -m editfoto aprender   [--ejemplos carpeta] [--nombre mi_estilo] [--base sudadera]   # sin --nombre: un preset por subcarpeta
 python -m editfoto descargar-modelos [--completo]
 python -m editfoto info
 ```
@@ -136,4 +160,8 @@ Los tests usan fotos sintéticas con la respuesta conocida: una sudadera con tex
 | BiRefNet lite / BiRefNet | Recorte | MIT | [onnx-community en HuggingFace](https://huggingface.co/onnx-community/BiRefNet_lite-ONNX) |
 | LaMa | Borrar objetos | Apache 2.0 | [Carve/LaMa-ONNX](https://huggingface.co/Carve/LaMa-ONNX) |
 
-Ambas licencias permiten el uso comercial. Los modelos se descargan en `modelos/` la primera vez.
+Ambas licencias permiten el uso comercial. Los modelos se descargan la primera vez en `%LOCALAPPDATA%\EDITFOTO\modelos` (en la instalación para desarrollo, en `modelos/`).
+
+## Publicar versiones
+
+Las versiones se publican con un tag `vX.Y.Z` en este repositorio. GitHub Actions compila `EDITFOTO.exe` y lo publica en [EDITFOTO-Releases](https://github.com/PedroValenzuela-INDRA/EDITFOTO-Releases). Los pasos, y cómo probar sin publicar, están en [`docs/MANTENIMIENTO.md`](docs/MANTENIMIENTO.md).
