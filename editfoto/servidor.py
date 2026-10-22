@@ -132,13 +132,15 @@ def crear_app(proyecto: Proyecto) -> FastAPI:
     @app.post("/api/aprender")
     def aprender(datos: dict = Body(...)):
         from .aprender import aprender as aprender_preset
+        from .aprender import aprender_por_tipo
 
         carpeta = datos.get("carpeta") or str(modelos.DATOS / "fotos" / "ejemplos")
         nombre = datos.get("nombre")
-        if not nombre:
-            raise HTTPException(400, "Falta el nombre del preset")
-        preset_nuevo, resumen = aprender_preset(carpeta, nombre, datos.get("base") or "generico")
-        return {"preset": preset_nuevo, "resumen": resumen}
+        if nombre:  # un preset con todas las fotos
+            preset_nuevo, resumen = aprender_preset(carpeta, nombre, datos.get("base") or "generico")
+            return {"preset": preset_nuevo, "presets": [preset_nuevo], "resumen": resumen}
+        presets, resumen = aprender_por_tipo(carpeta)  # un preset por subcarpeta
+        return {"preset": presets[0], "presets": presets, "resumen": resumen}
 
     # ---------- fotos ----------
 

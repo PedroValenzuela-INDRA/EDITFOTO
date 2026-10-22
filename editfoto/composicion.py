@@ -94,15 +94,27 @@ def encuadrar(img: np.ndarray, alfa: np.ndarray, lienzo: tuple[int, int], rellen
     return np.clip(img_l, 0, 1).astype(np.float32), np.clip(alfa_l, 0, 1).astype(np.float32), info
 
 
+_cache_fondos: dict = {}
+
+
 def _fondo(preset_fondo: dict, ancho: int, alto: int) -> np.ndarray:
     if preset_fondo.get("tipo") == "imagen" and preset_fondo.get("imagen"):
         try:
-            img = cargar(preset_fondo["imagen"])
-            h, w = img.shape[:2]
-            e = max(ancho / w, alto / h)
-            img = cv2.resize(img, (max(ancho, round(w * e)), max(alto, round(h * e))), interpolation=cv2.INTER_AREA)
-            y, x = (img.shape[0] - alto) // 2, (img.shape[1] - ancho) // 2
-            return img[y:y + alto, x:x + ancho].astype(np.float32)
+            from .fondos import ruta_absoluta  # rutas relativas: dentro de Documentos\EDITFOTO
+
+            ruta = ruta_absoluta(preset_fondo["imagen"])
+            clave = (str(ruta), ruta.stat().st_mtime, ancho, alto)
+            if clave not in _cache_fondos:
+                img = cargar(ruta)
+                h, w = img.shape[:2]
+                e = max(ancho / w, alto / h)
+                img = cv2.resize(img, (max(ancho, round(w * e)), max(alto, round(h * e))),
+                                 interpolation=cv2.INTER_AREA if e < 1 else cv2.INTER_CUBIC)
+                y, x = (img.shape[0] - alto) // 2, (img.shape[1] - ancho) // 2
+                if len(_cache_fondos) > 4:
+                    _cache_fondos.clear()
+                _cache_fondos[clave] = np.clip(img[y:y + alto, x:x + ancho], 0, 1).astype(np.float32)
+            return _cache_fondos[clave].copy()
         except Exception as e:
             print(f"Aviso: no se pudo cargar el fondo {preset_fondo['imagen']}: {e}")
     color = color_hex(preset_fondo.get("color", "#F4F4F2"))

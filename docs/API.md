@@ -50,7 +50,7 @@ Las respuestas son JSON salvo las rutas `/img/...`. Errores: codigo HTTP 4xx/5xx
 - `GET /api/presets` -> `[{nombre, descripcion}]`
 - `GET /api/presets/{nombre}` -> preset completo (ver `editfoto/config.py`, `POR_DEFECTO`)
 - `PUT /api/presets/{nombre}` body: preset parcial o completo -> guarda (fusionando) y devuelve el preset. Sirve tambien para crear uno nuevo.
-- `POST /api/aprender` body `{nombre, carpeta?, base?}` -> `{preset, resumen: {ejemplos, texto: [lineas]}}`. Tarda unos segundos por ejemplo.
+- `POST /api/aprender` body `{nombre?, carpeta?, base?}` -> `{preset, presets: [preset], resumen: {ejemplos, presets: [nombres], fondo: {...}, texto: [lineas]}}`. Tarda unos segundos por ejemplo. Sin `carpeta` usa `Documentos\EDITFOTO\fotos\ejemplos`. Con `nombre`: un preset con todas las fotos de la carpeta. Sin `nombre`: un preset por subcarpeta (`ejemplos/sudadera`, `ejemplos/pantalon`...), con el nombre de la subcarpeta. En ambos casos se aprende tu fondo: si hay una foto llamada `fondo*.jpg` se usa tal cual; si los ejemplos tienen un fondo con textura se reconstruye combinandolos; si es liso, se usa su color. El fondo queda en el preset como `fondo.tipo = "imagen"` con una ruta relativa a `Documentos\EDITFOTO` (`fondos/<nombre>.jpg`).
 
 ### Fotos
 - `GET /api/fotos` -> `{fotos: [Foto]}`

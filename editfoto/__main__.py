@@ -48,11 +48,14 @@ def cmd_procesar(a):
 
 
 def cmd_aprender(a):
-    from .aprender import aprender
+    from .aprender import aprender, aprender_por_tipo
 
     print(f"Aprendiendo el estilo de {a.ejemplos} ...")
-    preset, resumen = aprender(a.ejemplos, a.nombre, a.base)
-    print(f"\nPreset '{preset['nombre']}' guardado con {resumen['ejemplos']} ejemplos:")
+    if a.nombre:
+        _, resumen = aprender(a.ejemplos, a.nombre, a.base)
+    else:
+        _, resumen = aprender_por_tipo(a.ejemplos)
+    print(f"\nPresets guardados ({', '.join(resumen['presets'])}) con {resumen['ejemplos']} ejemplos:")
     for linea in resumen["texto"]:
         print("  - " + linea)
 
@@ -102,7 +105,8 @@ def main(argv=None):
 
     s = sub.add_parser("aprender", help="Crea un preset a partir de fotos editadas que te gustan")
     s.add_argument("--ejemplos", default=EJEMPLOS)
-    s.add_argument("--nombre", required=True)
+    s.add_argument("--nombre", default=None,
+                   help="Un solo preset con todas las fotos. Sin --nombre: un preset por subcarpeta (sudadera, pantalon...)")
     s.add_argument("--base", default="generico", help="Preset del que se copian el resto de ajustes")
     s.set_defaults(func=cmd_aprender)
 
