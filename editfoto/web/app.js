@@ -754,6 +754,7 @@ async function aplicarRuta() {
 const AJUSTES = [
   { id: 'arrugas', grupo: 'retoque', et: 'Arrugas', ruta: 'preset.arrugas.fuerza', min: 0, max: 1, paso: 0.05, neutro: 0.5, fmt: (v) => num(v, 2) },
   { id: 'nitidez', grupo: 'retoque', et: 'Nitidez', ruta: 'preset.nitidez', min: 0, max: 1, paso: 0.05, neutro: 0.3, fmt: (v) => num(v, 2) },
+  { id: 'forma', grupo: 'forma', et: 'Forma del ejemplo', ruta: 'preset.forma.fuerza', min: 0, max: 1, paso: 0.05, neutro: 0.7, fmt: (v) => num(v, 2) },
   { id: 'brillo', grupo: 'color', et: 'Brillo', ruta: 'preset.color.brillo', min: -1, max: 1, paso: 0.05, neutro: 0, fmt: (v) => conSigno(v, 2) },
   { id: 'contraste', grupo: 'color', et: 'Contraste', ruta: 'preset.color.contraste', min: -0.5, max: 0.5, paso: 0.01, neutro: 0, fmt: (v) => conSigno(v, 2) },
   { id: 'saturacion', grupo: 'color', et: 'Saturación', ruta: 'preset.color.saturacion', min: 0.5, max: 1.5, paso: 0.01, neutro: 1, fmt: (v) => num(v, 2) },
@@ -834,11 +835,38 @@ function iniciarControles() {
     D.valores[def.id] = parseFloat(entrada.value);
     ajusteVisual(def);
   }
+  formaEstadoControl();
   const auto = (f.ajustes || {}).enderezar_auto;
   $('#aj-enderezar').checked = auto === undefined ? true : !!auto;
   const activo = D.base ? obtener(D.base, 'enderezar.activo') : true;
   $('#aj-enderezar-ayuda').hidden = activo !== false;
   rellenarSelect($('#sel-preset-foto'), { valor: f.preset });
+}
+
+/** True si el preset tiene una silueta aprendida (forma.contorno) que usar. */
+function presetTieneContorno(preset) {
+  const c = preset ? obtener(preset, 'forma.contorno') : null;
+  return Array.isArray(c) && c.length > 0;
+}
+
+/** Sin silueta aprendida en el preset de la foto, el deslizador de forma no hace nada: se desactiva. */
+function formaEstadoControl() {
+  const tiene = presetTieneContorno(D.base);
+  const bloque = $('.ajuste[data-id="forma"]');
+  $('#aj-forma').disabled = !tiene;
+  $('button.mini', bloque).disabled = !tiene;
+  bloque.classList.toggle('desactivado', !tiene);
+  $('#aj-forma-sin').hidden = tiene;
+}
+
+/** Linea pequena con lo que ha hecho el ultimo render con la forma (adaptada, no aplicada y por que). */
+function pintarFormaInfo() {
+  const f = fotoActual();
+  const texto = f && f.info && typeof f.info.forma === 'string' ? f.info.forma.trim() : '';
+  const el = $('#aj-forma-info');
+  el.hidden = !texto;
+  el.textContent = texto;
+  el.classList.toggle('no-aplicada', texto.startsWith('no aplicada'));
 }
 
 /* ---- cola de renders: debounce, un solo envio a la vez, respuestas viejas descartadas ---- */
@@ -1076,6 +1104,7 @@ function pintarInfo() {
   const e = $('#info-error');
   e.hidden = !f.error;
   e.textContent = f.error || '';
+  pintarFormaInfo();
 }
 
 function botonProcesarFoto(f, texto, textoOcupado) {
@@ -1838,6 +1867,13 @@ const SECCIONES = [
     ],
   },
   {
+    titulo: 'Forma',
+    campos: [
+      { r: 'forma.fuerza', et: 'Fuerza de la forma del ejemplo (0 a 1)', t: 'num', min: 0, max: 1, paso: 0.05 },
+    ],
+    nota: 'Dobla la foto real de la prenda hacia la forma de tus ejemplos; no inventa nada. 0 = como en la foto, 1 = la silueta completa del ejemplo.',
+  },
+  {
     titulo: 'Nitidez y color',
     campos: [
       { r: 'nitidez', et: 'Nitidez (0 a 1)', t: 'num', min: 0, max: 1, paso: 0.05 },
@@ -1881,6 +1917,7 @@ function construirFormPreset() {
       }
       fs.append(crear('label', { class: 'campo', for: id }, c.et, ctrl));
       if (c.r === 'fondo.imagen') fs.append(crear('p', { class: 'ayuda', id: 'pf-fondo-nota', hidden: true }));
+      if (c.r === 'forma.fuerza') fs.append(crear('p', { class: 'ayuda', id: 'pf-forma-silueta' }));
     }
     if (sec.nota) fs.append(crear('p', { class: 'ayuda', texto: sec.nota }));
     cont.append(fs);
@@ -1927,6 +1964,7 @@ function rellenarFormPreset(preset) {
     } else el.value = v == null ? '' : v;
   }
   fondoAjustarCampos();
+  $('#pf-forma-silueta').textContent = presetTieneContorno(preset) ? 'Silueta aprendida: sí' : 'Silueta aprendida: no (usa Aprender)';
   marcarPresetSucio(false);
 }
 

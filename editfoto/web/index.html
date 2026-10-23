@@ -186,6 +186,11 @@
 
       <div id="ajustes">
         <details class="bloque" open data-grupo="retoque"><summary>Retoque</summary><div id="sl-retoque"></div></details>
+        <details class="bloque" open data-grupo="forma"><summary>Forma</summary><div id="sl-forma"></div>
+          <p class="ayuda">Dobla la foto real de la prenda hacia la forma de tus ejemplos; no inventa nada. A más fuerza, más puede cambiar la apariencia del corte.</p>
+          <p id="aj-forma-sin" class="ayuda" hidden>Aprende de tus fotos favoritas para usar su forma</p>
+          <p id="aj-forma-info" class="ayuda forma-info" hidden></p>
+        </details>
         <details class="bloque" open data-grupo="color"><summary>Color</summary><div id="sl-color"></div></details>
         <details class="bloque" open data-grupo="posicion"><summary>Posición y tamaño</summary><div id="sl-posicion"></div>
           <label class="casilla-linea"><input type="checkbox" id="aj-enderezar"> Enderezar automático</label>
@@ -195,8 +200,8 @@
 
       <section class="bloque acciones-panel">
         <button type="button" id="btn-restablecer" class="btn" title="Quita todos los ajustes de esta foto (el giro de 90° se conserva)">Restablecer</button>
-        <button type="button" id="btn-guardar-preset" class="btn" title="Guarda los ajustes de retoque y color en el preset de esta foto">Guardar estos ajustes en el preset</button>
-        <p class="ayuda">Guardar en el preset solo recoge arrugas, color y nitidez; la rotación, el tamaño y el movimiento son propios de cada foto.</p>
+        <button type="button" id="btn-guardar-preset" class="btn" title="Guarda los ajustes de retoque, forma y color en el preset de esta foto">Guardar estos ajustes en el preset</button>
+        <p class="ayuda">Guardar en el preset solo recoge arrugas, forma, color y nitidez; la rotación, el tamaño y el movimiento son propios de cada foto.</p>
       </section>
 
       <section class="bloque info">

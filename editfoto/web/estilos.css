@@ -427,6 +427,9 @@ details[open] > summary { margin-bottom: 8px; }
 .ajuste-cab { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
 .ajuste-cab label { flex: 1; color: var(--texto); }
 .ajuste.modificado .ajuste-cab label { color: #8ec5ff; }
+.ajuste.desactivado .ajuste-cab label, .ajuste.desactivado .valor { color: var(--tenue); }
+.ajuste.desactivado input[type="range"] { opacity: .45; cursor: not-allowed; }
+.forma-info.no-aplicada { color: var(--aviso); }
 .valor { min-width: 58px; text-align: right; font-variant-numeric: tabular-nums; color: var(--suave); }
 .mini {
   font: inherit; width: 22px; height: 22px; padding: 0; line-height: 1;
