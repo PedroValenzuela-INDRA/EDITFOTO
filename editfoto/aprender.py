@@ -43,6 +43,11 @@ def medir_ejemplo(img: np.ndarray, modelo: str = "auto", ancho_original: int | N
     _, prenda = mascara.limpiar(alfa)
     if prenda.sum() < 0.01 * prenda.size:
         return None
+    # En una foto de ejemplo, la prenda que se vende es la pieza mas grande; lo demas
+    # (otra prenda de decoracion, por ejemplo) forma parte del fondo.
+    n, etiquetas, stats, _ = cv2.connectedComponentsWithStats(prenda.astype(np.uint8), connectivity=8)
+    if n > 2:
+        prenda = etiquetas == 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
     h, w = prenda.shape
     ys, xs = np.nonzero(prenda)
     x0, x1, y0, y1 = xs.min(), xs.max() + 1, ys.min(), ys.max() + 1
@@ -68,6 +73,8 @@ def medir_ejemplo(img: np.ndarray, modelo: str = "auto", ancho_original: int | N
         "aspecto": w / h,
         "ancho": ancho_original or w,
         "relleno": float(max((x1 - x0) / w, (y1 - y0) / h)),
+        "ancho_rel": float((x1 - x0) / w),
+        "alto_rel": float((y1 - y0) / h),
         "centro_x": float((x0 + x1) / 2 / w),
         "centro_y": float((y0 + y1) / 2 / h),
         "fondo": [float(c) for c in fondo],
@@ -113,17 +120,25 @@ def aprender_fondo(ejemplos: list[Ejemplo], carpeta: Path, nombre: str, avisar=p
                 f"Fondo: tu foto del fondo vacio ({vacios[0].name})", {"origen": "foto_vacia"})
     if sum(e.medida["fondo_uniforme"] for e in ejemplos) >= len(ejemplos) / 2:
         return {"tipo": "color", "color": color}, f"Fondo liso {color}", {"origen": "color"}
-    if len(ejemplos) < 3:
-        return ({"tipo": "color", "color": color},
-                f"Fondo {color}: tus ejemplos tienen textura, pero hacen falta al menos 3 fotos (o una foto del"
-                " fondo vacio llamada fondo.jpg) para reconstruirlo", {"origen": "color"})
-    avisar("  Reconstruyendo tu fondo a partir de los ejemplos...")
-    placa, info = fondos.reconstruir([e.img for e in ejemplos], [e.prenda for e in ejemplos])
+    if len(ejemplos) >= 3:
+        avisar("  Reconstruyendo tu fondo a partir de los ejemplos...")
+        placa, info = fondos.reconstruir([e.img for e in ejemplos], [e.prenda for e in ejemplos])
+        # Solo vale si las fotos son del mismo sitio (casi todas se alinean); si no, se mezclarian.
+        if info["alineadas"] >= 0.6 * (info["fotos_usadas"] - 1):
+            ruta = fondos.guardar(placa, nombre)
+            frase = (f"Fondo reconstruido de {info['fotos_usadas']} fotos ({info['alineadas']} alineadas)"
+                     + (f"; se ha rellenado un {info['hueco_rellenado'] * 100:.0f}% que ninguna foto dejaba ver"
+                        if info["hueco_rellenado"] else ""))
+            return {"tipo": "imagen", "imagen": ruta, "color": color}, frase, dict(info, origen="reconstruido")
+        avisar("  Tus ejemplos no estan hechos desde el mismo sitio: se usa el fondo de uno de ellos.")
+    # Una sola foto: la que mas fondo deja ver, borrando su prenda (las decoraciones se quedan).
+    mejor = min(ejemplos, key=lambda e: e.prenda.mean())
+    placa, info = fondos.placa_de_un_ejemplo(mejor.img, mejor.prenda)
     ruta = fondos.guardar(placa, nombre)
-    frase = (f"Fondo reconstruido de {info['fotos_usadas']} fotos ({info['alineadas']} alineadas)"
-             + (f"; se ha rellenado un {info['hueco_rellenado'] * 100:.0f}% que ninguna foto dejaba ver"
-                if info["hueco_rellenado"] else ""))
-    return {"tipo": "imagen", "imagen": ruta, "color": color}, frase, dict(info, origen="reconstruido")
+    frase = (f"Fondo sacado de {mejor.ruta.name}: se ha borrado su prenda ({info['hueco_rellenado'] * 100:.0f}% de"
+             " la foto) y se conserva todo lo demas, decoracion incluida. Una foto del fondo vacio llamada"
+             " fondo.jpg lo haria exacto")
+    return {"tipo": "imagen", "imagen": ruta, "color": color}, frase, dict(info, origen="un_ejemplo")
 
 
 def _preset_de(ejemplos: list[Ejemplo], nombre: str, base: str, descripcion: str, fondo: dict) -> tuple[dict, list[str]]:
@@ -137,7 +152,9 @@ def _preset_de(ejemplos: list[Ejemplo], nombre: str, base: str, descripcion: str
         "nombre": config.nombre_valido(nombre),
         "descripcion": descripcion,
         "lienzo": {"ancho": ancho, "alto": alto},
-        "encuadre": {"relleno": round(float(np.clip(med("relleno"), 0.5, 0.97)), 3),
+        "encuadre": {"relleno": round(float(np.clip(med("relleno"), 0.3, 0.97)), 3),
+                     "relleno_x": round(float(np.clip(med("ancho_rel"), 0.2, 0.97)), 3),
+                     "relleno_y": round(float(np.clip(med("alto_rel"), 0.2, 0.97)), 3),
                      "centro_x": round(med("centro_x"), 3), "centro_y": round(med("centro_y"), 3)},
         "fondo": fondo,
         # La sombra difuminada solo oscurece el borde en parte: el factor se ha calibrado
@@ -147,10 +164,10 @@ def _preset_de(ejemplos: list[Ejemplo], nombre: str, base: str, descripcion: str
     preset = config.fusionar(config.cargar_preset(base), cambios)
     config.guardar_preset(preset)
     texto = [
-        f"{preset['nombre']}: foto final {ancho} x {alto} px, la prenda ocupa el "
-        f"{cambios['encuadre']['relleno'] * 100:.0f}% centrada en x={cambios['encuadre']['centro_x']:.2f},"
-        f" y={cambios['encuadre']['centro_y']:.2f}, sombra {cambios['sombra']['opacidad']:.2f}"
-        f" ({len(ejemplos)} ejemplos)",
+        f"{preset['nombre']}: foto final {ancho} x {alto} px, la prenda cabe en una caja del "
+        f"{cambios['encuadre']['relleno_x'] * 100:.0f}% del ancho y el {cambios['encuadre']['relleno_y'] * 100:.0f}%"
+        f" del alto centrada en x={cambios['encuadre']['centro_x']:.2f}, y={cambios['encuadre']['centro_y']:.2f},"
+        f" sombra {cambios['sombra']['opacidad']:.2f} ({len(ejemplos)} ejemplos)",
     ]
     return preset, texto
 

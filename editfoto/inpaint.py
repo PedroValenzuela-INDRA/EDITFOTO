@@ -29,7 +29,8 @@ def _rellenar_zona(img: np.ndarray, zona: np.ndarray, caja: tuple[int, int, int,
     # Si el recorte se sale de la foto, se rellena por reflejo.
     pad = [max(0, -ry0), max(0, ry1 - h), max(0, -rx0), max(0, rx1 - w)]
     img_p = cv2.copyMakeBorder(img, *pad, cv2.BORDER_REFLECT_101)
-    zona_p = cv2.copyMakeBorder(zona.astype(np.uint8), *pad, cv2.BORDER_CONSTANT, value=0)
+    # La zona tambien se refleja: si no, el reflejo ensenaria a LaMa lo que se quiere borrar.
+    zona_p = cv2.copyMakeBorder(zona.astype(np.uint8), *pad, cv2.BORDER_REFLECT_101)
     ry0, ry1, rx0, rx1 = ry0 + pad[0], ry1 + pad[0], rx0 + pad[2], rx1 + pad[2]
     recorte = img_p[ry0:ry1, rx0:rx1]
     zona_r = zona_p[ry0:ry1, rx0:rx1]

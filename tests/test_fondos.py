@@ -133,3 +133,92 @@ def test_fotos_pequenas_e_identicas_se_alinean_sin_moverse(sin_lama):
     placa, info = fondos.reconstruir([suelo.copy() for _ in tapas], tapas)
     assert info["alineadas"] == 2
     assert np.abs(placa - suelo).mean() < 0.002
+
+
+def moqueta(alto=800, ancho=600, semilla=3) -> np.ndarray:
+    """Moqueta gris: textura fina aleatoria y un degradado de luz suave."""
+    rng = np.random.default_rng(semilla)
+    yy, xx = np.mgrid[0:alto, 0:ancho].astype(np.float32)
+    grano = cv2.GaussianBlur(rng.normal(0, 0.06, (alto, ancho)).astype(np.float32), (0, 0), 1.2)
+    luz = 0.5 + 0.06 * (xx / ancho) - 0.05 * (yy / alto)
+    return np.clip(np.dstack([luz + grano] * 3) * np.array([1.0, 0.98, 0.95], np.float32), 0, 1).astype(np.float32)
+
+
+def test_relleno_de_textura_sin_manchas_ni_decoracion(sin_lama):
+    suelo = moqueta()
+    img = suelo.copy()
+    img[620:800, 150:450] = (0.45, 0.6, 0.85)  # pantalon vaquero de decoracion
+    hueco = np.zeros((800, 600), np.uint8)
+    cv2.ellipse(hueco, (300, 330), (250, 230), 0, 0, 360, 1, -1)  # prenda grande: ~40 % de la foto
+    hueco = hueco.astype(bool)
+    img[hueco] = (0.25, 0.15, 0.1)  # la prenda que se borra
+
+    placa = fondos.rellenar_textura(img, hueco)
+    dentro = cv2.erode(hueco.astype(np.uint8), np.ones((21, 21), np.uint8)).astype(bool)
+    # Luz y color del suelo, no de la prenda borrada ni del vaquero.
+    assert np.abs(placa[dentro].mean(0) - suelo[dentro].mean(0)).max() < 0.02
+    assert (placa[dentro][:, 2] - placa[dentro][:, 0]).mean() < 0.01, "se ha copiado azul del vaquero"
+
+    def grano(x):
+        return np.std((x - cv2.GaussianBlur(x, (0, 0), 3))[..., 1][dentro])
+
+    assert 0.6 < grano(placa) / grano(suelo) < 1.6, "la textura rellenada no se parece a la moqueta"
+    # Sin manchas: la luz rellenada varia tan suave como la real.
+    def manchas(x):
+        return np.std(cv2.GaussianBlur(x, (0, 0), 12)[..., 1][dentro])
+
+    assert manchas(placa) < 2.5 * manchas(suelo) + 0.005
+    assert np.array_equal(placa[700:800, 200:400], img[700:800, 200:400]), "la decoracion no se toca"
+
+
+def test_encuadre_en_caja_deja_sitio_abajo():
+    from editfoto import composicion
+
+    alfa = np.zeros((900, 1200), np.float32)
+    alfa[100:800, 200:1000] = 1  # prenda casi cuadrada
+    _, alfa_l, _ = composicion.encuadrar(np.zeros((900, 1200, 3), np.float32), alfa, (600, 800), 0.84, 0.5, 0.39,
+                                         relleno_x=0.91, relleno_y=0.6)
+    ys, xs = np.nonzero(alfa_l > 0.5)
+    assert ys.max() < 0.39 * 800 + 0.3 * 800 + 2, "la prenda invade la zona de la decoracion"
+    assert (ys.max() - ys.min()) / 800 == pytest.approx(0.6, abs=0.01)  # la limita el alto
+
+
+def test_giro_inicial_del_preset_para_fotos_nuevas(tmp_path, monkeypatch):
+    from editfoto.proyecto import Proyecto
+
+    monkeypatch.setattr(config, "CARPETA_PRESETS_USUARIO", tmp_path / "presets")
+    config.guardar_preset(config.fusionar(config.cargar_preset("generico"), {"nombre": "chaqueta", "giro_inicial": 3}))
+    entrada = tmp_path / "entrada"
+    (entrada / "chaqueta").mkdir(parents=True)
+    imagen.guardar_jpg(np.full((30, 40, 3), 0.5, np.float32), entrada / "chaqueta" / "a.jpg")
+    imagen.guardar_jpg(np.full((30, 40, 3), 0.5, np.float32), entrada / "suelta.jpg")
+    p = Proyecto(entrada, tmp_path / "salida")
+    assert p.foto("chaqueta__a").ajustes == {"giro90": 3}
+    assert p.foto("suelta").ajustes == {}
+    assert p.imagen_trabajo("chaqueta__a").shape[:2] == (40, 30)  # ya tumbada a vertical
+
+
+def test_aprender_de_un_solo_ejemplo_conserva_la_decoracion(tmp_path, monkeypatch, sin_lama):
+    monkeypatch.setattr(config, "CARPETA_PRESETS_USUARIO", tmp_path / "datos" / "presets")
+    monkeypatch.setattr(modelos, "DATOS", tmp_path / "datos")
+    img = moqueta()
+    img[620:800, 150:450] = (0.45, 0.6, 0.85)  # vaquero de decoracion
+    prenda = np.zeros((800, 600), bool)
+    prenda[60:545, 30:575] = True  # chaqueta: 91 % del ancho, 60 % del alto, arriba
+    img[prenda] = (0.25, 0.15, 0.1)
+    decoracion = np.zeros((800, 600), bool)
+    decoracion[620:800, 150:450] = True
+    monkeypatch.setattr("editfoto.segmentar.segmentar",
+                        lambda im, modelo="auto": (prenda | decoracion).astype(np.float32))
+    raiz = tmp_path / "ejemplos"
+    (raiz / "chaqueta").mkdir(parents=True)
+    imagen.guardar_jpg(img, raiz / "chaqueta" / "favorita.jpg", 95)
+
+    presets, resumen = aprender.aprender_por_tipo(raiz, avisar=lambda *_: None)
+    enc = presets[0]["encuadre"]
+    assert enc["relleno_x"] == pytest.approx(0.91, abs=0.01) and enc["relleno_y"] == pytest.approx(0.61, abs=0.01)
+    assert enc["centro_y"] == pytest.approx(0.38, abs=0.01)
+    assert resumen["fondo"]["origen"] == "un_ejemplo"
+    placa = imagen.cargar(tmp_path / "datos" / presets[0]["fondo"]["imagen"])
+    assert placa[680:780, 200:400, 2].mean() > 0.75, "el vaquero de decoracion debe seguir en el fondo"
+    assert np.abs(placa[200:400, 150:450].mean((0, 1)) - img[0:50, 0:600].mean((0, 1))).max() < 0.06

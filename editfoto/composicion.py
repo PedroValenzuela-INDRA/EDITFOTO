@@ -51,8 +51,13 @@ def angulo_enderezado(prenda: np.ndarray, max_grados: float) -> float:
 
 def encuadrar(img: np.ndarray, alfa: np.ndarray, lienzo: tuple[int, int], relleno: float,
               centro_x: float, centro_y: float, angulo: float = 0.0, escala_extra: float = 1.0,
-              mover_x: float = 0.0, mover_y: float = 0.0, borde_reflejo: bool = False):
-    """Gira, escala y coloca la prenda en el lienzo. Devuelve (img, alfa, info)."""
+              mover_x: float = 0.0, mover_y: float = 0.0, borde_reflejo: bool = False,
+              relleno_x: float | None = None, relleno_y: float | None = None):
+    """Gira, escala y coloca la prenda en el lienzo. Devuelve (img, alfa, info).
+
+    La prenda cabe en una caja de relleno_x * ancho por relleno_y * alto centrada en
+    (centro_x, centro_y); si no se dan, la caja usa `relleno` en las dos direcciones.
+    Asi se puede dejar sitio libre, p. ej. abajo para un pantalon de decoracion."""
     ancho, alto = lienzo
     prenda = (alfa > 0.5).astype(np.uint8)
     ys, xs = np.nonzero(prenda)
@@ -69,7 +74,7 @@ def encuadrar(img: np.ndarray, alfa: np.ndarray, lienzo: tuple[int, int], rellen
     x0, y0 = girados.min(0)
     x1, y1 = girados.max(0)
     bw, bh = max(x1 - x0, 1), max(y1 - y0, 1)
-    escala = relleno * min(ancho / bw, alto / bh) * escala_extra
+    escala = min((relleno_x or relleno) * ancho / bw, (relleno_y or relleno) * alto / bh) * escala_extra
     destino = np.array([centro_x * ancho + mover_x * ancho, centro_y * alto + mover_y * alto])
     caja_centro = np.array([(x0 + x1) / 2, (y0 + y1) / 2])
 

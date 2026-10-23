@@ -13,3 +13,6 @@ cabecera es `## vX.Y.Z · AAAA-MM-DD · Titulo`.
 - **Girar fotos 90 grados** (botones y tecla R / Mayus+R), tambien desde la rejilla. El giro se guarda: no se pierde al restablecer los ajustes ni al cerrar la app.
 - **Tu fondo de verdad**: "Aprender de mis fotos favoritas" reconstruye el fondo de tus fotos de ejemplo (madera, tela...) combinandolas, en vez de poner un color liso. Si anades una foto del fondo vacio llamada fondo.jpg, se usa tal cual.
 - **Un estilo por tipo de prenda**: pon tus ejemplos en subcarpetas (sudadera, pantalon, jersey...) y se crea un preset para cada una, con su encuadre y su sombra.
+- **Basta una foto de ejemplo**: se borra su prenda y se queda todo lo demas, incluida la decoracion (por ejemplo, el pantalon que pones abajo). El hueco se rellena con la textura de tu propio suelo, sin manchas.
+- **Encuadre en caja**: la prenda ocupa el mismo ancho y alto que en tus ejemplos, asi queda sitio para la decoracion.
+- **Girar las fotos nuevas**: cada preset puede girar solas las fotos que entran (si siempre disparas en horizontal).

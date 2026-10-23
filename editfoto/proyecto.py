@@ -105,8 +105,9 @@ class Proyecto:
                         pass
                 carpeta = str(rel.parent).replace("\\", "/") if str(rel.parent) != "." else ""
                 preset = config.preset_para_carpeta(carpeta) or self.preset_por_defecto
+                giro = int(config.cargar_preset(preset).get("giro_inicial") or 0) % 4
                 self.fotos[id_] = Foto(id=id_, ruta=str(rel).replace("\\", "/"), nombre=rel.stem,
-                                       carpeta=carpeta, preset=preset)
+                                       carpeta=carpeta, preset=preset, ajustes={"giro90": giro} if giro else {})
             # Fotos que ya no estan en la carpeta de entrada desaparecen de la lista.
             for id_ in list(self.fotos):
                 if id_ not in vistas:

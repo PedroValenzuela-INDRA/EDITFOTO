@@ -50,7 +50,7 @@ Las respuestas son JSON salvo las rutas `/img/...`. Errores: codigo HTTP 4xx/5xx
 - `GET /api/presets` -> `[{nombre, descripcion}]`
 - `GET /api/presets/{nombre}` -> preset completo (ver `editfoto/config.py`, `POR_DEFECTO`)
 - `PUT /api/presets/{nombre}` body: preset parcial o completo -> guarda (fusionando) y devuelve el preset. Sirve tambien para crear uno nuevo.
-- `POST /api/aprender` body `{nombre?, carpeta?, base?}` -> `{preset, presets: [preset], resumen: {ejemplos, presets: [nombres], fondo: {...}, texto: [lineas]}}`. Tarda unos segundos por ejemplo. Sin `carpeta` usa `Documentos\EDITFOTO\fotos\ejemplos`. Con `nombre`: un preset con todas las fotos de la carpeta. Sin `nombre`: un preset por subcarpeta (`ejemplos/sudadera`, `ejemplos/pantalon`...), con el nombre de la subcarpeta. En ambos casos se aprende tu fondo: si hay una foto llamada `fondo*.jpg` se usa tal cual; si los ejemplos tienen un fondo con textura se reconstruye combinandolos; si es liso, se usa su color. El fondo queda en el preset como `fondo.tipo = "imagen"` con una ruta relativa a `Documentos\EDITFOTO` (`fondos/<nombre>.jpg`).
+- `POST /api/aprender` body `{nombre?, carpeta?, base?}` -> `{preset, presets: [preset], resumen: {ejemplos, presets: [nombres], fondo: {...}, texto: [lineas]}}`. Tarda unos segundos por ejemplo. Sin `carpeta` usa `Documentos\EDITFOTO\fotos\ejemplos`. Con `nombre`: un preset con todas las fotos de la carpeta. Sin `nombre`: un preset por subcarpeta (`ejemplos/sudadera`, `ejemplos/pantalon`...), con el nombre de la subcarpeta. En ambos casos se aprende tu fondo: si hay una foto llamada `fondo*.jpg` se usa tal cual; si los ejemplos tienen un fondo con textura se reconstruye combinandolos; si es liso, se usa su color. Si solo hay 1 o 2 ejemplos, o no estan hechos desde el mismo sitio, el fondo sale del ejemplo que mas fondo deja ver, borrando su prenda principal (la pieza mas grande) y conservando lo demas (decoraciones). Ademas guarda `encuadre.relleno_x` y `encuadre.relleno_y` (caja de ancho y alto de la prenda en tus ejemplos). El fondo queda en el preset como `fondo.tipo = "imagen"` con una ruta relativa a `Documentos\EDITFOTO` (`fondos/<nombre>.jpg`).
 
 ### Fotos
 - `GET /api/fotos` -> `{fotos: [Foto]}`
@@ -86,3 +86,8 @@ Las respuestas son JSON salvo las rutas `/img/...`. Errores: codigo HTTP 4xx/5xx
 
 ### Interfaz
 - `GET /` sirve `editfoto/web/index.html`; `GET /static/...` sirve el resto de `editfoto/web/`.
+
+## Campos de preset anadidos en v0.2.0
+
+- `giro_inicial` (0 a 3): cuartos de vuelta horarios que se aplican a las fotos NUEVAS de ese preset al aparecer en la carpeta de entrada (quedan en `ajustes.giro90`).
+- `encuadre.relleno_x`, `encuadre.relleno_y` (0.2 a 0.97 o null): la prenda cabe en una caja de ese ancho y alto (fracciones del lienzo) centrada en `centro_x`/`centro_y`. Con null se usa `encuadre.relleno` para las dos.

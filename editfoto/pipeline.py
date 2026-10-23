@@ -85,7 +85,7 @@ def renderizar(img: np.ndarray, alfa_bruto: np.ndarray, preset: dict, ajustes: d
     frente_l, alfa_l, info_enc = composicion.encuadrar(
         frente, alfa, lienzo, float(enc["relleno"]), float(enc["centro_x"]), float(enc["centro_y"]),
         angulo, float(ajustes["escala"]), float(ajustes["mover_x"]), float(ajustes["mover_y"]),
-        borde_reflejo=fondo_original)
+        borde_reflejo=fondo_original, relleno_x=enc.get("relleno_x"), relleno_y=enc.get("relleno_y"))
     info.update(info_enc)
 
     if fondo_original:

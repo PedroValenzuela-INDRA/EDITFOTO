@@ -26,8 +26,13 @@ POR_DEFECTO: dict = {
     # Tamano de la foto final. 3:4 vertical encaja bien en la rejilla de Vinted.
     "lienzo": {"ancho": 1500, "alto": 2000},
     # relleno: fraccion del lienzo que ocupa la prenda en su dimension mas ajustada.
+    # relleno_x / relleno_y (opcionales): caja con ancho y alto por separado; las aprende
+    # "aprender" de tus ejemplos (p. ej. ancha pero baja para dejar sitio a una decoracion).
     # centro_x / centro_y: donde queda el centro de la prenda (0.5 = centrada).
-    "encuadre": {"relleno": 0.84, "centro_x": 0.5, "centro_y": 0.5},
+    "encuadre": {"relleno": 0.84, "relleno_x": None, "relleno_y": None, "centro_x": 0.5, "centro_y": 0.5},
+    # Cuartos de vuelta (en sentido horario) que se aplican a las fotos nuevas de este preset.
+    # Util si siempre disparas con el movil en horizontal y la prenda sale tumbada.
+    "giro_inicial": 0,
     # tipo: "color" (fondo liso), "imagen" (tu fondo favorito) u "original" (se deja el fondo de la foto).
     "fondo": {"tipo": "color", "color": "#F4F4F2", "imagen": ""},
     # Sombra suave bajo la prenda para que no parezca pegada. Valores relativos al tamano de la prenda.
