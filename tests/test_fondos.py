@@ -222,3 +222,47 @@ def test_aprender_de_un_solo_ejemplo_conserva_la_decoracion(tmp_path, monkeypatc
     placa = imagen.cargar(tmp_path / "datos" / presets[0]["fondo"]["imagen"])
     assert placa[680:780, 200:400, 2].mean() > 0.75, "el vaquero de decoracion debe seguir en el fondo"
     assert np.abs(placa[200:400, 150:450].mean((0, 1)) - img[0:50, 0:600].mean((0, 1))).max() < 0.06
+
+
+def test_adaptar_forma_lleva_la_silueta_a_la_del_ejemplo():
+    from editfoto import forma
+
+    h, w = 900, 900
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    elipse = np.zeros((h, w), np.uint8)
+    cv2.ellipse(elipse, (450, 450), (220, 330), 0, 0, 360, 1, -1)
+    rectangulo = np.zeros((h, w), np.uint8)
+    cv2.rectangle(rectangulo, (180, 230), (720, 670), 1, -1)  # el ejemplo: ancha y rectangular
+    ejemplo = forma.normalizar(forma.silueta(rectangulo.astype(bool)))[0]
+    tela = np.dstack([0.4 + 0.15 * np.sin(xx / 5) * np.sin(yy / 7)] * 3).astype(np.float32)  # textura
+    img_d, alfa_d, info = forma.adaptar(tela, elipse.astype(np.float32), ejemplo, 1.0, distancia_maxima=1.0)
+    assert info["forma"].startswith("adaptada")
+    res = alfa_d > 0.5
+    # Mismo tamano, otra forma: la del ejemplo, escalada a la misma area y en el mismo sitio.
+    assert abs(res.sum() / elipse.sum() - 1) < 0.03
+    ex, ey = forma.normalizar(forma.silueta(res))[0], ejemplo
+    assert forma.emparejar(ex, ey)[1] < 0.03
+    # Los pixeles se doblan pero no se emborronan: la textura conserva su contraste.
+    centro = cv2.erode(res.astype(np.uint8), np.ones((61, 61), np.uint8)).astype(bool)
+    assert img_d[centro].std() > 0.8 * tela[elipse.astype(bool)].std()
+    # A fuerza 0 no se toca nada.
+    assert forma.adaptar(tela, elipse.astype(np.float32), ejemplo, 0.0)[1] is not None
+
+
+def test_adaptar_forma_no_se_aplica_si_no_procede():
+    from editfoto import forma
+
+    chaqueta = np.zeros((600, 600), np.uint8)
+    cv2.ellipse(chaqueta, (300, 300), (250, 180), 0, 0, 360, 1, -1)
+    ejemplo = forma.normalizar(forma.silueta(chaqueta.astype(bool)))[0]
+    pantalon = np.zeros((1000, 600), np.float32)
+    pantalon[50:300, 120:480] = 1
+    pantalon[280:950, 120:290] = 1
+    pantalon[280:950, 310:480] = 1
+    img = np.full((1000, 600, 3), 0.5, np.float32)
+    _, alfa, info = forma.adaptar(img, pantalon, ejemplo, 1.0)
+    assert "muy distinta" in info["forma"] and np.array_equal(alfa, pantalon)
+    dos = np.zeros((600, 600), np.float32)
+    dos[100:300, 50:250] = 1
+    dos[100:300, 350:550] = 1
+    assert "varias piezas" in forma.adaptar(np.zeros((600, 600, 3), np.float32), dos, ejemplo, 1.0)[2]["forma"]

@@ -91,7 +91,7 @@ Cada subcarpeta crea o actualiza el preset con su nombre, copiando su estilo: pr
 
 No es un entrenamiento de IA, no hace falta: el estilo de una foto de producto se reduce a esas medidas y a ese fondo. Se ha comprobado con fotos generadas con valores conocidos: recupera el encuadre exacto, la sombra con un error de 0,01 y un fondo de madera con un error medio del 0,1 %, a partir de 8 fotos movidas entre sí hasta unos 20 píxeles.
 
-Lo que no puede aprender es **cómo doblas la ropa**: eso es físico. Cambiarlo en la foto sería redibujar la prenda, justo lo que no queremos en Vinted.
+Además aprende la **forma** de la prenda en tus ejemplos (por ejemplo, mangas abiertas en arco) y **dobla la foto real** de cada prenda nueva para que se parezca, como el "licuar" de Photoshop pero automático. No se inventa nada: el tejido, los logos y los desperfectos son los de verdad, solo deformados. Se regula con "Forma del ejemplo" (0 = como en la foto; por defecto 0,7, porque a más fuerza más puede cambiar la apariencia del corte). Lo que no aparece en tu foto no puede aparecer en el resultado: si quieres el bajo doblado enseñando el forro, dóblalo al hacer la foto. Si la prenda es muy distinta del ejemplo (un pantalón con la forma de una chaqueta), no se aplica y la app lo avisa.
 
 ## Velocidad
 

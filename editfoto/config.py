@@ -30,6 +30,9 @@ POR_DEFECTO: dict = {
     # "aprender" de tus ejemplos (p. ej. ancha pero baja para dejar sitio a una decoracion).
     # centro_x / centro_y: donde queda el centro de la prenda (0.5 = centrada).
     "encuadre": {"relleno": 0.84, "relleno_x": None, "relleno_y": None, "centro_x": 0.5, "centro_y": 0.5},
+    # Adaptar la forma de la prenda a la silueta de tus ejemplos (mangas en arco...). Deforma la
+    # foto real, no inventa nada. "contorno" lo rellena "aprender"; fuerza 0 = como en la foto.
+    "forma": {"contorno": None, "fuerza": 0.7},
     # Cuartos de vuelta (en sentido horario) que se aplican a las fotos nuevas de este preset.
     # Util si siempre disparas con el movil en horizontal y la prenda sale tumbada.
     "giro_inicial": 0,

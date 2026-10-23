@@ -16,3 +16,4 @@ cabecera es `## vX.Y.Z · AAAA-MM-DD · Titulo`.
 - **Basta una foto de ejemplo**: se borra su prenda y se queda todo lo demas, incluida la decoracion (por ejemplo, el pantalon que pones abajo). El hueco se rellena con la textura de tu propio suelo, sin manchas.
 - **Encuadre en caja**: la prenda ocupa el mismo ancho y alto que en tus ejemplos, asi queda sitio para la decoracion.
 - **Girar las fotos nuevas**: cada preset puede girar solas las fotos que entran (si siempre disparas en horizontal).
+- **La forma de tus ejemplos**: la app dobla la foto real de la prenda para que tome la silueta de tus fotos favoritas (por ejemplo, mangas abiertas en arco). No inventa nada: el tejido, los logos y los desperfectos son los de verdad. Se regula con "Forma del ejemplo" (0 = como en la foto). Lo que no se ve en tu foto, como el forro de un bajo doblado, no puede aparecer.

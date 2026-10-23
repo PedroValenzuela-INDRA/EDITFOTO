@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from . import arrugas, color, composicion, inpaint, mascara, segmentar
+from . import arrugas, color, composicion, forma, inpaint, mascara, segmentar
 from .config import AJUSTES_FOTO, fusionar
 from .imagen import cargar, reducir
 
@@ -69,6 +69,12 @@ def renderizar(img: np.ndarray, alfa_bruto: np.ndarray, preset: dict, ajustes: d
 
     a = preset["arrugas"]
     img = arrugas.suavizar(img, alfa, a["fuerza"], a["escala"], a["respeto_bordes"], capas.proteger)
+
+    # Despues de las arrugas: asi los pinceles (pintados sobre la foto sin deformar) siguen alineados.
+    f = preset.get("forma") or {}
+    if f.get("contorno") is not None and float(f.get("fuerza") or 0) > 0:
+        img, alfa, info_forma = forma.adaptar(img, alfa, f["contorno"], float(f["fuerza"]))
+        info.update(info_forma)
 
     fondo_original = preset["fondo"]["tipo"] == "original"
     frente = img if fondo_original else mascara.color_frente(img, alfa)

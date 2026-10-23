@@ -91,3 +91,4 @@ Las respuestas son JSON salvo las rutas `/img/...`. Errores: codigo HTTP 4xx/5xx
 
 - `giro_inicial` (0 a 3): cuartos de vuelta horarios que se aplican a las fotos NUEVAS de ese preset al aparecer en la carpeta de entrada (quedan en `ajustes.giro90`).
 - `encuadre.relleno_x`, `encuadre.relleno_y` (0.2 a 0.97 o null): la prenda cabe en una caja de ese ancho y alto (fracciones del lienzo) centrada en `centro_x`/`centro_y`. Con null se usa `encuadre.relleno` para las dos.
+- `forma = {contorno, fuerza}`: `contorno` es la silueta tipo de tus ejemplos (64 puntos normalizados, la rellena `aprender`; no se edita a mano) y `fuerza` (0 a 1, por defecto 0.7) cuanto se adapta la prenda a ella. Tras renderizar, `info.forma` dice si se ha adaptado ("adaptada al ejemplo (fuerza 0.70, parecido 0.93)") o por que no ("no aplicada: silueta muy distinta del ejemplo (0.29)", "no aplicada: la prenda tiene varias piezas"). Por foto: `ajustes.preset.forma.fuerza`.

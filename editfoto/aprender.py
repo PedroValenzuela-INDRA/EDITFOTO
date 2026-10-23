@@ -23,7 +23,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from . import config, fondos, imagen, mascara, segmentar
+from . import config, fondos, forma, imagen, mascara, segmentar
 
 _CALIBRADO_SOMBRA = 6.5
 LADO_EJEMPLOS = 1400
@@ -161,6 +161,9 @@ def _preset_de(ejemplos: list[Ejemplo], nombre: str, base: str, descripcion: str
         # midiendo fotos generadas con una opacidad conocida.
         "sombra": {"opacidad": round(float(np.clip(med("sombra") * _CALIBRADO_SOMBRA, 0, 0.5)), 3)},
     }
+    siluetas = [s for s in (forma.silueta(e.prenda) for e in ejemplos) if s is not None]
+    if siluetas:  # la silueta tipo de tus ejemplos, para adaptar la forma de las prendas nuevas
+        cambios["forma"] = {"contorno": np.round(forma.media_de_siluetas(siluetas), 4).tolist()}
     preset = config.fusionar(config.cargar_preset(base), cambios)
     config.guardar_preset(preset)
     texto = [
