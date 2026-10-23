@@ -1787,11 +1787,23 @@ const SECCIONES = [
     ],
   },
   {
+    titulo: 'Orientación',
+    campos: [
+      {
+        r: 'giro_inicial', et: 'Girar las fotos nuevas', t: 'sel', entero: true,
+        opciones: [['0', 'No girar'], ['1', '90 grados a la derecha'], ['2', '180 grados'], ['3', '90 grados a la izquierda']],
+      },
+    ],
+    nota: 'Se aplica a las fotos que entren nuevas en la carpeta; las que ya están se giran con R / Mayús+R.',
+  },
+  {
     titulo: 'Encuadre',
     campos: [
-      { r: 'encuadre.relleno', et: 'Relleno (fracción del lienzo que ocupa la prenda)', t: 'num', min: 0.3, max: 1, paso: 0.01 },
-      { r: 'encuadre.centro_x', et: 'Centro horizontal (0,5 = centrada)', t: 'num', min: 0, max: 1, paso: 0.01 },
-      { r: 'encuadre.centro_y', et: 'Centro vertical (0,5 = centrada)', t: 'num', min: 0, max: 1, paso: 0.01 },
+      { r: 'encuadre.relleno', et: 'Relleno (si no hay ancho y alto máximos)', t: 'num', min: 0.3, max: 1, paso: 0.001 },
+      { r: 'encuadre.relleno_x', et: 'Ancho máximo de la prenda (fracción del lienzo)', t: 'num', min: 0.2, max: 0.97, paso: 0.001, vacio: true, ph: 'igual que Relleno' },
+      { r: 'encuadre.relleno_y', et: 'Alto máximo de la prenda (fracción del lienzo)', t: 'num', min: 0.2, max: 0.97, paso: 0.001, vacio: true, ph: 'igual que Relleno' },
+      { r: 'encuadre.centro_x', et: 'Centro horizontal (0,5 = centrada)', t: 'num', min: 0, max: 1, paso: 0.001 },
+      { r: 'encuadre.centro_y', et: 'Centro vertical (0,5 = centrada)', t: 'num', min: 0, max: 1, paso: 0.001 },
     ],
   },
   {
@@ -1844,10 +1856,15 @@ function construirFormPreset() {
     for (const c of sec.campos) {
       const id = 'pf-' + c.r.replace(/\./g, '-');
       let ctrl;
-      if (c.t === 'num') ctrl = crear('input', { type: 'number', id, min: c.min, max: c.max, step: c.paso, 'data-ruta': c.r, 'data-tipo': 'num' });
+      if (c.t === 'num') {
+        ctrl = crear('input', {
+          type: 'number', id, min: c.min, max: c.max, step: c.paso, placeholder: c.ph || '',
+          'data-ruta': c.r, 'data-tipo': 'num', 'data-et': c.et.split(' (')[0], 'data-vacio': c.vacio ? 'nulo' : '',
+        });
+      }
       else if (c.t === 'texto') ctrl = crear('input', { type: 'text', id, placeholder: c.ph || '', 'data-ruta': c.r, 'data-tipo': 'texto' });
       else if (c.t === 'sel') {
-        ctrl = crear('select', { id, 'data-ruta': c.r, 'data-tipo': 'sel' }, c.opciones.map(([v, n]) => crear('option', { value: v, texto: n })));
+        ctrl = crear('select', { id, 'data-ruta': c.r, 'data-tipo': 'sel', 'data-entero': c.entero ? '1' : '' }, c.opciones.map(([v, n]) => crear('option', { value: v, texto: n })));
       } else if (c.t === 'check') {
         ctrl = crear('input', { type: 'checkbox', id, 'data-ruta': c.r, 'data-tipo': 'check' });
         fs.append(crear('label', { class: 'campo campo-check', for: id }, ctrl, c.et));
@@ -1865,6 +1882,7 @@ function construirFormPreset() {
       fs.append(crear('label', { class: 'campo', for: id }, c.et, ctrl));
       if (c.r === 'fondo.imagen') fs.append(crear('p', { class: 'ayuda', id: 'pf-fondo-nota', hidden: true }));
     }
+    if (sec.nota) fs.append(crear('p', { class: 'ayuda', texto: sec.nota }));
     cont.append(fs);
   }
   const tipoFondo = $('#pf-fondo-tipo');
@@ -1903,10 +1921,30 @@ function rellenarFormPreset(preset) {
       const hex = /^#[0-9a-f]{6}$/i.test(v || '') ? v.toLowerCase() : '#f4f4f2';
       el.value = hex;
       $('#' + el.id + '-hex').value = hex.toUpperCase();
+    } else if (el.dataset.entero) {
+      const n = Math.round(Number(v));
+      el.value = String(Number.isFinite(n) ? ((n % 4) + 4) % 4 : 0);
     } else el.value = v == null ? '' : v;
   }
   fondoAjustarCampos();
   marcarPresetSucio(false);
+}
+
+/** Revisa los campos numéricos del formulario; devuelve el primero que no sea válido, o null. */
+function campoPresetInvalido() {
+  for (const el of $$('#preset-campos input[data-tipo="num"]')) {
+    const nombre = el.dataset.et || 'Este campo';
+    if (el.validity.badInput) return { el, texto: `${nombre} tiene que ser un número.` };
+    if (el.value.trim() === '') continue;
+    const v = parseFloat(el.value);
+    const min = parseFloat(el.min);
+    const max = parseFloat(el.max);
+    if (Number.isNaN(v) || (!Number.isNaN(min) && v < min) || (!Number.isNaN(max) && v > max)) {
+      const f = (x) => x.toLocaleString('es-ES', { maximumFractionDigits: 3 });
+      return { el, texto: `${nombre} tiene que estar entre ${f(min)} y ${f(max)}.` };
+    }
+  }
+  return null;
 }
 
 function leerFormPreset() {
@@ -1917,11 +1955,15 @@ function leerFormPreset() {
     if (tipo === 'check') v = el.checked;
     else if (tipo === 'num') {
       v = parseFloat(el.value);
-      if (Number.isNaN(v)) continue;
+      if (Number.isNaN(v)) {
+        if (el.dataset.vacio !== 'nulo') continue;
+        v = null; // campo opcional vacío: el preset vuelve a usar el valor general
+      }
     } else if (tipo === 'color') {
       const hex = $('#' + el.id + '-hex').value;
       v = /^#[0-9a-f]{6}$/i.test(hex) ? hex.toUpperCase() : el.value.toUpperCase();
-    } else v = el.value;
+    } else if (el.dataset.entero) v = parseInt(el.value, 10) || 0;
+    else v = el.value;
     fijar(salida, el.dataset.ruta, v);
   }
   return salida;
@@ -1969,6 +2011,12 @@ async function presetsMostrar() {
 async function presetGuardar(ev) {
   ev.preventDefault();
   if (!PV.nombre) return;
+  const malo = campoPresetInvalido();
+  if (malo) {
+    avisar(malo.texto, 'error');
+    malo.el.focus();
+    return;
+  }
   try {
     const guardado = await api('PUT', '/api/presets/' + encodeURIComponent(PV.nombre), leerFormPreset());
     S.cachePresets.set(PV.nombre, guardado);
