@@ -3,7 +3,8 @@
 /* =====================================================================
    EDITFOTO - interfaz web local (JavaScript puro, sin dependencias)
    Secciones: utilidades, API y avisos, estado, rejilla, procesado por
-   lotes, detalle (con giro de 90 grados), pintor, presets, app de escritorio
+   lotes, detalle (con giro de 90 grados), pintor, presets, autoaprendizaje
+   (Me gusta, opciones para elegir y Mis favoritas), app de escritorio
    (modelos, actualizacion, novedades, carpetas, salir), teclado y arranque.
    ===================================================================== */
 
@@ -184,7 +185,7 @@ const S = {
   descripciones: {},
   cachePresets: new Map(),
   filtro: 'todas',
-  vista: 'rejilla', // rejilla | detalle | presets
+  vista: 'rejilla', // rejilla | detalle | presets | favoritas
   id: null, // foto abierta en el detalle
   ultimo: null, // ultima foto abierta (para resaltarla al volver)
   modo: 'resultado', // resultado | antes | pintar
@@ -256,6 +257,7 @@ function rellenarSelectores() {
   rellenarSelect($('#sel-preset-foto'), { valor: fotoActual() ? fotoActual().preset : null });
   rellenarSelect($('#nuevo-base'), { valor: 'generico' });
   rellenarSelect($('#aprender-base'), { valor: 'generico' });
+  rellenarSelect($('#fav-preset'), { valor: $('#fav-preset').value || almacen.leer('fav-preset', '') });
 }
 
 /* ---------------------------------------------------------------------
@@ -681,14 +683,11 @@ async function recargarCarpeta() {
 }
 
 /* ---------------------------------------------------------------------
-   Navegacion (hash: "", "#foto/ID", "#presets")
+   Navegacion (hash: "", "#foto/ID", "#presets", "#favoritas")
    --------------------------------------------------------------------- */
 
 function leerRuta() {
-  const h = decodeURIComponent(location.hash.replace(/^#\/?/, ''));
-  if (h.startsWith('foto/')) return { vista: 'detalle', id: h.slice(5) };
-  if (h === 'presets') return { vista: 'presets' };
-  return { vista: 'rejilla' };
+  return leerRutaDe(location.hash);
 }
 
 async function navegar(hash) {
@@ -713,6 +712,7 @@ function leerRutaDe(hash) {
   const h = decodeURIComponent(hash.replace(/^#\/?/, ''));
   if (h.startsWith('foto/')) return { vista: 'detalle', id: h.slice(5) };
   if (h === 'presets') return { vista: 'presets' };
+  if (h === 'favoritas') return { vista: 'favoritas' };
   return { vista: 'rejilla' };
 }
 
@@ -722,19 +722,25 @@ function mostrarVista(v) {
   $('#vista-rejilla').hidden = v !== 'rejilla';
   $('#vista-detalle').hidden = v !== 'detalle';
   $('#vista-presets').hidden = v !== 'presets';
+  $('#vista-favoritas').hidden = v !== 'favoritas';
   $('#barra-lote').hidden = v !== 'rejilla';
-  $('#tab-fotos').classList.toggle('activa', v !== 'presets');
+  $('#tab-fotos').classList.toggle('activa', v === 'rejilla' || v === 'detalle');
   $('#tab-presets').classList.toggle('activa', v === 'presets');
+  $('#tab-favoritas').classList.toggle('activa', v === 'favoritas');
 }
 
 async function aplicarRuta() {
   const r = leerRuta();
+  if (O.abierta) cerrarOpciones();
   if (S.vista === 'detalle' && !(r.vista === 'detalle')) salirDelDetalle();
   if (r.vista === 'detalle') {
     await mostrarDetalle(r.id);
   } else if (r.vista === 'presets') {
     mostrarVista('presets');
     await presetsMostrar();
+  } else if (r.vista === 'favoritas') {
+    mostrarVista('favoritas');
+    await favoritasMostrar();
   } else {
     mostrarVista('rejilla');
     $('#vista-rejilla').scrollTop = S.scrollRejilla;
@@ -1085,6 +1091,16 @@ function pintarCabeceraDetalle() {
   b.classList.toggle('aprobada', !!f.aprobada);
   b.replaceChildren(...(f.aprobada ? ['Aprobada (quitar)'] : ['Aprobar y siguiente ', crear('kbd', { texto: 'A' })]));
   b.title = f.aprobada ? 'Quitar la aprobación (A)' : 'Aprobar y pasar a la siguiente (A)';
+  const gusta = $('#d-megusta');
+  gusta.disabled = f.estado !== 'lista' || AP.guardando;
+  gusta.title = f.estado === 'lista'
+    ? 'Guardar esta foto en tus favoritas para que la app aprenda de ella (F)'
+    : 'Procesa la foto antes de marcarla con Me gusta';
+  const opciones = $('#d-opciones');
+  opciones.disabled = f.estado !== 'lista';
+  opciones.title = f.estado === 'lista'
+    ? 'Ver 4 versiones de esta foto y elegir la que más te guste (O)'
+    : 'Procesa la foto antes de ver sus opciones';
 }
 
 function pintarInfo() {
@@ -2140,6 +2156,466 @@ async function presetAprender(ev) {
 }
 
 /* ---------------------------------------------------------------------
+   Autoaprendizaje: Me gusta, opciones para elegir y Mis favoritas
+   --------------------------------------------------------------------- */
+
+const AP = { vigilando: false, repetir: false, guardando: false };
+
+const enc = encodeURIComponent;
+const textoFotos = (n) => (n === 1 ? '1 foto' : n + ' fotos');
+
+/** Aviso pequeño de la barra superior mientras la app aprende (null o activo=false lo oculta). */
+function pintarAprendizaje(est) {
+  const caja = $('#aprendiendo');
+  const activo = !!(est && est.activo);
+  caja.hidden = !activo;
+  if (!activo) return;
+  const texto = est.mensaje || 'Aprendiendo de tus favoritas…';
+  $('#aprendiendo-texto').textContent = texto;
+  caja.title = texto;
+}
+
+/**
+ * Consulta /api/aprendizaje cada segundo hasta que termina y avisa del resultado.
+ * recienPedido: el aprendizaje se acaba de pedir, así que el servidor puede tardar un instante en
+ * ponerse en marcha y no se da por terminado hasta verlo en marcha (o pasar unos segundos).
+ * Si llega otra petición mientras se vigila, al acabar se pide otra vuelta para incluir las fotos nuevas.
+ */
+async function vigilarAprendizaje(recienPedido = false) {
+  if (AP.vigilando) {
+    if (recienPedido) AP.repetir = true;
+    return;
+  }
+  AP.vigilando = true;
+  let est = null;
+  try {
+    if (recienPedido) pintarAprendizaje({ activo: true, mensaje: '' });
+    let visto = !recienPedido;
+    let intentos = 0;
+    let fallos = 0;
+    while (!S.cerrada) {
+      try {
+        est = await api('GET', '/api/aprendizaje', undefined, { silencioso: true });
+        fallos = 0;
+      } catch (e) {
+        est = null;
+        if (++fallos >= 5) {
+          if (!S.cerrada) avisar('Se ha perdido la conexión con EDITFOTO.', 'error');
+          return;
+        }
+        await esperar(1500);
+        continue;
+      }
+      if (est.activo) {
+        visto = true;
+        pintarAprendizaje(est);
+      } else if (visto || ++intentos > 8) {
+        if (!AP.repetir) break;
+        AP.repetir = false;
+        try { await api('POST', '/api/reaprender', undefined, { silencioso: true }); } catch (e) { break; }
+        visto = false;
+        intentos = 0;
+      }
+      await esperar(visto ? 1000 : 400);
+    }
+  } finally {
+    AP.vigilando = false;
+    AP.repetir = false;
+    pintarAprendizaje(null);
+  }
+  if (est && !S.cerrada) finAprendizaje(est);
+}
+
+function finAprendizaje(est) {
+  if (est.error) avisar('No se ha podido aprender de tus favoritas: ' + est.error, 'error');
+  else avisar(est.mensaje || 'La app ha terminado de aprender de tus favoritas.', 'ok');
+  refrescarTrasAprender();
+}
+
+/** Los presets han cambiado en el servidor: se olvidan las copias y se refrescan las pantallas abiertas. */
+async function refrescarTrasAprender() {
+  S.cachePresets.clear();
+  const f = S.vista === 'detalle' ? fotoActual() : null;
+  if (f && D.pendientes === 0 && !D.timer) {
+    try { D.base = await presetBase(f.preset); } catch (e) { D.base = null; }
+    if (S.id === f.id && D.pendientes === 0 && !D.timer) iniciarControles();
+  }
+  if (S.vista === 'favoritas') favoritasCargar();
+}
+
+/* ---- Me gusta ---- */
+
+async function meGusta() {
+  const f0 = fotoActual();
+  if (!f0 || AP.guardando) return;
+  if (f0.estado !== 'lista') {
+    avisar('Procesa la foto antes de marcarla con Me gusta.');
+    return;
+  }
+  AP.guardando = true;
+  pintarCabeceraDetalle();
+  try {
+    await vaciarCambios(); // la favorita es lo que se ve: los ajustes pendientes van antes
+    await D.cola;
+    const f = S.porId.get(f0.id) || f0;
+    if (f.estado !== 'lista') {
+      avisar('Procesa la foto antes de marcarla con Me gusta.');
+      return;
+    }
+    await api('POST', `/api/fotos/${enc(f.id)}/favorita`);
+    avisar(`Guardada en tus favoritas de ${f.preset}. La app está aprendiendo de ellas…`, 'ok');
+    vigilarAprendizaje(true);
+  } catch (e) { /* aviso ya mostrado */ } finally {
+    AP.guardando = false;
+    pintarCabeceraDetalle();
+  }
+}
+
+/* ---- Ver opciones ---- */
+
+const O = { abierta: false, id: null, token: 0, datos: null, eligiendo: false };
+
+function opcionesTitulo(texto) {
+  $('#op-titulo').textContent = texto || 'Elige la versión que más te guste';
+}
+
+async function abrirOpciones() {
+  const f = fotoActual();
+  if (!f || O.abierta || $('dialog[open]')) return;
+  if (f.estado !== 'lista') {
+    avisar('Procesa la foto antes de ver sus opciones.');
+    return;
+  }
+  if (modeloBloquea()) {
+    avisar(TEXTO_ESPERA_MODELO);
+    return;
+  }
+  O.abierta = true;
+  O.id = f.id;
+  O.datos = null;
+  O.eligiendo = false;
+  const token = ++O.token;
+  opcionesTitulo();
+  $('#op-aviso').hidden = true;
+  $('#op-rejilla').hidden = true;
+  $('#op-rejilla').classList.remove('ocupado');
+  $('#op-cargando').hidden = false;
+  $('#capa-opciones').showModal();
+  $('#op-cerrar').focus();
+
+  let r;
+  try {
+    await vaciarCambios(); // los ajustes pendientes de los deslizadores van antes
+    if (token !== O.token) return;
+    r = await encolar(() => api('POST', `/api/fotos/${enc(f.id)}/opciones`), 'Preparando las opciones...');
+  } catch (e) {
+    if (token === O.token) cerrarOpciones();
+    return;
+  }
+  if (token !== O.token) return; // se cerró la capa mientras se preparaban
+  const lista = Array.isArray(r.opciones) ? r.opciones : [];
+  if (!lista.length) {
+    avisar('No se han podido preparar las opciones.', 'error');
+    cerrarOpciones();
+    return;
+  }
+  O.datos = r;
+  // Sin notas de parecido no hay recomendación real (el servidor devuelve la primera por defecto).
+  const recomendada = lista.find((o) => o.indice === r.recomendada);
+  const hayReco = !!(recomendada && recomendada.parecido != null);
+  $('#op-aviso').hidden = !!r.con_favoritas;
+  const sello = Date.now() + '-' + Math.floor(Math.random() * 1e6);
+  const imgs = [];
+  const cartas = lista.map((o, i) => {
+    const img = crear('img', { alt: `Versión ${i + 1}: ${o.nombre}`, draggable: 'false' });
+    imgs.push(ponerImagen(img, `/img/${enc(f.id)}/opcion/${o.indice}?v=${sello}`));
+    return opcionTarjeta(o, i, img, hayReco && o.indice === r.recomendada);
+  });
+  $('#op-rejilla').replaceChildren(...cartas);
+  await Promise.all(imgs);
+  if (token !== O.token) return;
+  $('#op-cargando').hidden = true;
+  $('#op-rejilla').hidden = false;
+  const primera = $('.op-tarjeta.recomendada') || $('.op-tarjeta');
+  if (primera) primera.focus();
+}
+
+function opcionTarjeta(o, i, img, recomendada) {
+  const parecido = o.parecido == null
+    ? 'Sin favoritas para comparar'
+    : `Parecido a tus favoritas: ${num(o.parecido * 100, 0)} %`;
+  return crear(
+    'button',
+    { type: 'button', class: 'op-tarjeta' + (recomendada ? ' recomendada' : ''), 'data-indice': String(o.indice), onclick: () => elegirOpcion(i) },
+    crear(
+      'div',
+      { class: 'op-imagen' },
+      img,
+      crear('kbd', { class: 'op-num', texto: String(i + 1) }),
+      recomendada ? crear('span', { class: 'op-reco', texto: 'Recomendada' }) : null
+    ),
+    crear(
+      'div',
+      { class: 'op-datos' },
+      crear('strong', { class: 'op-nombre', texto: o.nombre }),
+      crear('span', { class: 'op-parecido' + (o.parecido == null ? ' sin-nota' : ''), texto: parecido })
+    )
+  );
+}
+
+/** Cierra la capa sin elegir (también la deja limpia: imágenes soltadas, estado a cero). */
+function cerrarOpciones() {
+  const dlg = $('#capa-opciones');
+  O.abierta = false;
+  O.eligiendo = false;
+  O.token++;
+  O.datos = null;
+  for (const img of $$('#op-rejilla img')) soltarImagen(img);
+  $('#op-rejilla').replaceChildren();
+  if (dlg.open) dlg.close();
+}
+
+async function elegirOpcion(n) {
+  if (!O.abierta || !O.datos || O.eligiendo) return;
+  const op = O.datos.opciones[n];
+  if (!op) return;
+  const id = O.id;
+  const token = O.token;
+  O.eligiendo = true;
+  $('#op-rejilla').classList.add('ocupado');
+  opcionesTitulo('Aplicando la versión elegida…');
+  let f;
+  try {
+    f = await encolar(() => api('POST', `/api/fotos/${enc(id)}/elegir`, { indice: op.indice }), 'Aplicando la versión elegida...');
+  } catch (e) {
+    if (token === O.token) {
+      O.eligiendo = false;
+      $('#op-rejilla').classList.remove('ocupado');
+      opcionesTitulo();
+    }
+    return;
+  }
+  cerrarOpciones();
+  f = guardarFoto(f);
+  avisar(`Elegida. Las próximas fotos de ${f.preset} se acercarán a este estilo.`, 'ok');
+  S.cachePresets.delete(f.preset); // la elección ha movido los ajustes del preset en el servidor
+  if (S.vista === 'detalle' && S.id === id) {
+    try { D.base = await presetBase(f.preset); } catch (e) { D.base = null; }
+    if (S.id === id) {
+      iniciarControles();
+      await actualizarVisor();
+    }
+  }
+}
+
+/** Teclas dentro de la capa: 1 a 4 eligen, Esc cierra. */
+function opcionesTecla(e) {
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    if (!O.eligiendo) cerrarOpciones();
+  } else if (/^[1-4]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault();
+    elegirOpcion(Number(e.key) - 1);
+  }
+}
+
+/* ---- Mis favoritas ---- */
+
+const FV = { subiendo: false, token: 0 };
+
+async function favoritasMostrar() {
+  try { await cargarPresets(); } catch (e) { /* se usan los que había */ }
+  await favoritasCargar();
+}
+
+/** Pide qué favoritas hay y qué ha aprendido cada tipo de prenda, y pinta una sección por cada uno. */
+async function favoritasCargar() {
+  const token = ++FV.token;
+  let lista;
+  try {
+    lista = await api('GET', '/api/ejemplos');
+  } catch (e) {
+    return;
+  }
+  const todas = (lista && lista.presets) || {};
+  const presets = Object.keys(todas).filter((p) => Array.isArray(todas[p]) && todas[p].length);
+  const aprendido = await Promise.all(
+    presets.map((p) => api('GET', `/api/presets/${enc(p)}/aprendizaje`, undefined, { silencioso: true }).catch(() => null))
+  );
+  if (token !== FV.token) return; // llegó otra carga más reciente
+  const sello = Date.now();
+  $('#fav-secciones').replaceChildren(...presets.map((p, i) => favoritasSeccion(p, todas[p], aprendido[i], sello)));
+  $('#fav-vacio').hidden = presets.length > 0;
+}
+
+function favoritasSeccion(preset, nombres, aprendido, sello) {
+  const frases = aprendido && Array.isArray(aprendido.resumen) ? aprendido.resumen : [];
+  return crear(
+    'section',
+    { class: 'bloque fav-seccion', 'data-preset': preset, 'aria-label': 'Favoritas de ' + preset },
+    crear('div', { class: 'fav-seccion-cab' }, crear('h3', { texto: preset }), crear('span', { class: 'chip', texto: textoFotos(nombres.length) })),
+    crear(
+      'div',
+      { class: 'fav-aprendido' },
+      frases.length
+        ? crear('ul', {}, frases.map((t) => crear('li', { texto: t })))
+        : crear('p', { class: 'tenue', texto: 'Aún no has elegido entre opciones' })
+    ),
+    crear('div', { class: 'fav-rejilla' }, nombres.map((n) => favoritasFoto(preset, n, sello)))
+  );
+}
+
+function favoritasFoto(preset, nombre, sello) {
+  const img = crear('img', { alt: nombre, loading: 'lazy', decoding: 'async', draggable: 'false' });
+  const caja = crear('div', { class: 'miniatura' }, img);
+  img.addEventListener('load', () => caja.classList.remove('sin-vista'));
+  img.addEventListener('error', () => caja.classList.add('sin-vista'));
+  img.src = `/img/ejemplo/${enc(preset)}/${enc(nombre)}?max=480&v=${sello}`;
+  const fig = crear(
+    'figure',
+    { class: 'fav-foto', 'data-nombre': nombre },
+    caja,
+    crear(
+      'figcaption',
+      {},
+      crear('span', { class: 'fav-nombre', texto: nombre, title: nombre }),
+      crear('button', {
+        type: 'button',
+        class: 'btn pequeno peligro',
+        texto: 'Quitar',
+        'aria-label': `Quitar ${nombre} de tus favoritas de ${preset}`,
+        onclick: () => favoritasQuitar(preset, nombre, fig),
+      })
+    )
+  );
+  return fig;
+}
+
+async function favoritasQuitar(preset, nombre, fig) {
+  const ok = await confirmar(
+    `Se quitará ${nombre} de tus favoritas de ${preset}. Tus otras fotos no se tocan.`,
+    { titulo: 'Quitar de mis favoritas', si: 'Quitar', no: 'Cancelar' }
+  );
+  if (!ok) return;
+  try {
+    await api('DELETE', `/api/ejemplos/${enc(preset)}/${enc(nombre)}`);
+  } catch (e) {
+    return;
+  }
+  const seccion = fig.closest('.fav-seccion');
+  fig.remove();
+  if (seccion) {
+    const quedan = $$('.fav-foto', seccion).length;
+    if (quedan) $('.chip', seccion).textContent = textoFotos(quedan);
+    else seccion.remove();
+  }
+  $('#fav-vacio').hidden = $$('.fav-seccion').length > 0;
+  avisar(`Quitada de tus favoritas de ${preset}.`, 'ok');
+}
+
+function favoritasOcupado(ocupado) {
+  FV.subiendo = ocupado;
+  $('#fav-subir').disabled = ocupado;
+  $('#fav-preset').disabled = ocupado;
+  if (!ocupado) $('#fav-progreso').textContent = '';
+}
+
+/** Sube las fotos una a una (el cuerpo es la propia foto) y después pide a la app que vuelva a aprender. */
+async function favoritasSubir(ficheros, preset) {
+  if (FV.subiendo) {
+    avisar('Espera a que termine la subida anterior.');
+    return;
+  }
+  if (!preset) {
+    avisar('Elige primero el tipo de prenda.', 'error');
+    return;
+  }
+  const fotos = Array.from(ficheros).filter((f) => (f.type || '').startsWith('image/') || /\.(jpe?g|png|webp)$/i.test(f.name));
+  if (!fotos.length) {
+    avisar('Ahí no hay ninguna foto. Elige fotos JPG, PNG o WEBP.', 'error');
+    return;
+  }
+  favoritasOcupado(true);
+  let subidas = 0;
+  let sinConexion = false;
+  const fallos = [];
+  try {
+    for (let i = 0; i < fotos.length; i++) {
+      $('#fav-progreso').textContent = `Subiendo ${i + 1} de ${fotos.length}…`;
+      try {
+        await api('PUT', `/api/ejemplos/${enc(preset)}/${enc(fotos[i].name)}`, fotos[i], { silencioso: true });
+        subidas++;
+      } catch (e) {
+        if (e.estado === 0) {
+          sinConexion = true;
+          break;
+        }
+        fallos.push(`${fotos[i].name} (${e.message})`);
+      }
+    }
+  } finally {
+    favoritasOcupado(false);
+  }
+  if (sinConexion) avisar('No se puede conectar con EDITFOTO. Comprueba que el programa sigue abierto.', 'error');
+  else if (fallos.length) {
+    const resto = fallos.length > 2 ? ` y ${fallos.length - 2} más` : '';
+    avisar(`No se ha podido subir ${fallos.slice(0, 2).join(', ')}${resto}.`, 'error');
+  }
+  if (S.vista === 'favoritas') favoritasCargar();
+  if (!subidas) return;
+  try {
+    const r = await api('POST', '/api/reaprender', undefined, { silencioso: true });
+    if (!r.empezado) AP.repetir = true; // ya estaba aprendiendo: otra vuelta al acabar para incluir las nuevas
+    avisar(`${subidas === 1 ? 'Subida 1 foto' : `Subidas ${subidas} fotos`} a tus favoritas de ${preset}. La app está aprendiendo de ellas…`, 'ok');
+    vigilarAprendizaje(!!r.empezado);
+  } catch (e) {
+    avisar('Las fotos están guardadas, pero no se ha podido empezar a aprender de ellas.', 'error');
+  }
+}
+
+/** Arrastrar y soltar: sobre la sección de un tipo de prenda va a ese tipo; en cualquier otro sitio, al elegido arriba. */
+function enlazarFavoritas() {
+  const vista = $('#vista-favoritas');
+  const hayFicheros = (e) => !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+  const destino = (e) => {
+    const sec = e.target.closest && e.target.closest('.fav-seccion');
+    return sec ? { nodo: sec, preset: sec.dataset.preset } : { nodo: $('#fav-subida'), preset: $('#fav-preset').value };
+  };
+  const limpiar = () => $$('.arrastrando', vista).forEach((n) => n.classList.remove('arrastrando'));
+
+  $('#fav-subir').addEventListener('click', () => $('#fav-fichero').click());
+  $('#fav-fichero').addEventListener('change', (e) => {
+    const ficheros = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (ficheros.length) favoritasSubir(ficheros, $('#fav-preset').value);
+  });
+  $('#fav-preset').addEventListener('change', (e) => almacen.guardar('fav-preset', e.target.value));
+
+  const sobre = (e) => {
+    if (!hayFicheros(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    const { nodo } = destino(e);
+    if (!nodo.classList.contains('arrastrando')) {
+      limpiar();
+      nodo.classList.add('arrastrando');
+    }
+  };
+  vista.addEventListener('dragenter', sobre);
+  vista.addEventListener('dragover', sobre);
+  vista.addEventListener('dragleave', (e) => {
+    if (!vista.contains(e.relatedTarget)) limpiar();
+  });
+  vista.addEventListener('drop', (e) => {
+    if (!hayFicheros(e)) return;
+    e.preventDefault();
+    const { preset } = destino(e);
+    limpiar();
+    favoritasSubir(e.dataTransfer.files, preset);
+  });
+}
+
+/* ---------------------------------------------------------------------
    App de escritorio: versión, modelos, actualización, novedades, carpetas, salir
    --------------------------------------------------------------------- */
 
@@ -2428,6 +2904,7 @@ async function salir() {
   }
   if (P.id && P.historia.length) avisos.push('Tienes trazos de pincel sin aplicar: se perderán.');
   if (PV.sucio) avisos.push('Tienes cambios sin guardar en un preset: se perderán.');
+  if (FV.subiendo) avisos.push('Se están subiendo fotos a tus favoritas: las que falten no se guardarán.');
   if (avisos.length) {
     const ok = await confirmar(avisos.join(' '), { titulo: 'Salir de EDITFOTO', si: 'Salir de todos modos', no: 'Seguir en EDITFOTO' });
     if (!ok) return;
@@ -2472,6 +2949,10 @@ document.addEventListener('keydown', (e) => {
     alternarAyuda();
     return;
   }
+  if (O.abierta) {
+    opcionesTecla(e);
+    return;
+  }
   if (dialogoAbierto) return;
 
   if (e.key === 'Escape') {
@@ -2513,6 +2994,18 @@ document.addEventListener('keydown', (e) => {
       if (e.repeat || e.altKey) return;
       e.preventDefault();
       girar(S.id, e.shiftKey ? -1 : 1);
+      break;
+    case 'f':
+    case 'F':
+      if (e.repeat || e.altKey) return;
+      e.preventDefault();
+      meGusta();
+      break;
+    case 'o':
+    case 'O':
+      if (e.repeat || e.altKey) return;
+      e.preventDefault();
+      abrirOpciones();
       break;
     case '1': ponerModo('resultado'); break;
     case '2': ponerModo('antes'); break;
@@ -2559,6 +3052,7 @@ function enlazarEventos() {
   $('#marca').addEventListener('click', (e) => { e.preventDefault(); navegar('#'); });
   $('#tab-fotos').addEventListener('click', () => navegar('#'));
   $('#tab-presets').addEventListener('click', () => navegar('#presets'));
+  $('#tab-favoritas').addEventListener('click', () => navegar('#favoritas'));
   $('#btn-ayuda').addEventListener('click', alternarAyuda);
   $('#btn-procesar').addEventListener('click', () => procesar(false));
   $('#btn-rehacer').addEventListener('click', () => procesar(true));
@@ -2600,6 +3094,8 @@ function enlazarEventos() {
   $('#d-ant').addEventListener('click', () => irAVecina(-1));
   $('#d-sig').addEventListener('click', () => irAVecina(1));
   $('#d-aprobar').addEventListener('click', aprobarActual);
+  $('#d-megusta').addEventListener('click', meGusta);
+  $('#d-opciones').addEventListener('click', abrirOpciones);
   $$('.modo').forEach((b) => b.addEventListener('click', () => ponerModo(b.dataset.modo)));
   $('#sel-preset-foto').addEventListener('change', (e) => cambiarPresetFoto(e.target.value));
   $('#btn-restablecer').addEventListener('click', restablecer);
@@ -2609,6 +3105,12 @@ function enlazarEventos() {
   $('#form-nuevo').addEventListener('submit', presetCrear);
   $('#form-aprender').addEventListener('submit', presetAprender);
   $('#aprender-abrir').addEventListener('click', () => abrirCarpeta('ejemplos'));
+
+  $('#op-cerrar').addEventListener('click', () => { if (!O.eligiendo) cerrarOpciones(); });
+  const dlgOp = $('#capa-opciones');
+  dlgOp.addEventListener('cancel', (e) => { if (O.eligiendo) e.preventDefault(); });
+  dlgOp.addEventListener('close', () => { if (O.abierta && !dlgOp.open) cerrarOpciones(); });
+  enlazarFavoritas();
 
   $('#d-girar-izq').append(iconoGiro(-1));
   $('#d-girar-der').append(iconoGiro(1));
@@ -2636,7 +3138,7 @@ function enlazarEventos() {
 
   window.addEventListener('hashchange', aplicarRuta);
   window.addEventListener('beforeunload', (e) => {
-    if ((P.id && P.id === S.id && P.historia.length) || PV.sucio) {
+    if ((P.id && P.id === S.id && P.historia.length) || PV.sucio || FV.subiendo) {
       e.preventDefault();
       e.returnValue = '';
     }
@@ -2678,6 +3180,11 @@ async function iniciar() {
       pintarProgreso();
       vigilarProgreso();
     }
+  } catch (e) { /* sin servidor */ }
+
+  try {
+    const a = await api('GET', '/api/aprendizaje', undefined, { silencioso: true });
+    if (a && a.activo) vigilarAprendizaje();
   } catch (e) { /* sin servidor */ }
 }
 

@@ -16,11 +16,16 @@
   <nav class="pestanas" aria-label="Secciones">
     <button type="button" id="tab-fotos" class="pestana activa">Fotos</button>
     <button type="button" id="tab-presets" class="pestana">Presets</button>
+    <button type="button" id="tab-favoritas" class="pestana">Mis favoritas</button>
   </nav>
   <div id="progreso" class="progreso" hidden aria-live="polite">
     <div class="barra" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Progreso del procesado"><div id="barra-relleno" class="barra-relleno"></div></div>
     <span id="progreso-texto" class="progreso-texto"></span>
     <button type="button" id="btn-cancelar" class="btn peligro pequeno">Cancelar</button>
+  </div>
+  <div id="aprendiendo" class="aprendiendo" hidden role="status" aria-live="polite">
+    <span class="spinner" aria-hidden="true"></span>
+    <span id="aprendiendo-texto" class="aprendiendo-texto"></span>
   </div>
   <span class="espaciador"></span>
   <div class="menu-caja">
@@ -102,6 +107,8 @@
         <div class="d-nav">
           <button type="button" id="d-ant" class="btn icono-g" title="Foto anterior (flecha izquierda)" aria-label="Foto anterior">&larr;</button>
           <button type="button" id="d-sig" class="btn icono-g" title="Foto siguiente (flecha derecha)" aria-label="Foto siguiente">&rarr;</button>
+          <button type="button" id="d-megusta" class="btn" title="Guardar esta foto en tus favoritas para que la app aprenda de ella (F)">Me gusta <kbd>F</kbd></button>
+          <button type="button" id="d-opciones" class="btn" title="Ver 4 versiones de esta foto y elegir la que más te guste (O)">Ver opciones <kbd>O</kbd></button>
           <button type="button" id="d-aprobar" class="btn exito" title="Aprobar y pasar a la siguiente (A)">Aprobar y siguiente <kbd>A</kbd></button>
         </div>
       </div>
@@ -269,6 +276,30 @@
     </div>
   </section>
 
+  <!-- ============ MIS FAVORITAS ============ -->
+  <section id="vista-favoritas" class="vista vista-favoritas" hidden aria-label="Mis favoritas">
+    <div class="fav-contenido">
+      <div class="fav-intro">
+        <h2>Mis favoritas</h2>
+        <p class="fav-ayuda">Pon aquí las fotos que más te gustan de cada tipo de prenda: las de la app o las tuyas. La app aprende de ellas el fondo, el encuadre, la forma y el estilo. Cuantas más, mejor. Si añades una foto del fondo vacío llamada fondo.jpg, se usa tal cual.</p>
+      </div>
+      <div id="fav-subida" class="bloque fav-subida">
+        <label class="campo-en-linea">Tipo de prenda
+          <select id="fav-preset" title="Tipo de prenda al que se añaden las fotos que subas"></select>
+        </label>
+        <button type="button" id="fav-subir" class="btn primario">Subir fotos que me gustan</button>
+        <input type="file" id="fav-fichero" accept="image/*" multiple hidden>
+        <span id="fav-progreso" class="fav-progreso" role="status"></span>
+        <span class="fav-arrastrar tenue">También puedes arrastrar fotos y soltarlas aquí.</span>
+      </div>
+      <div id="fav-secciones" class="fav-secciones"></div>
+      <div id="fav-vacio" class="vacio" hidden>
+        <h2>Aún no tienes fotos favoritas</h2>
+        <p>Sube fotos con el botón de arriba, arrástralas hasta aquí o pulsa Me gusta en una foto ya editada.</p>
+      </div>
+    </div>
+  </section>
+
 </main>
 
 <!-- Ayuda de atajos -->
@@ -284,6 +315,14 @@
           <dt><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></dt><dd>Resultado, Antes / Después, Pintar</dd>
           <dt><kbd>R</kbd></dt><dd>Girar la foto 90° a la derecha</dd>
           <dt><kbd>Mayús</kbd>+<kbd>R</kbd></dt><dd>Girar la foto 90° a la izquierda</dd>
+          <dt><kbd>F</kbd></dt><dd>Me gusta: guardar la foto en tus favoritas</dd>
+          <dt><kbd>O</kbd></dt><dd>Ver 4 versiones y elegir una</dd>
+        </dl>
+      </div>
+      <div><h3>Al ver las opciones</h3>
+        <dl>
+          <dt><kbd>1</kbd> a <kbd>4</kbd></dt><dd>Elegir esa versión</dd>
+          <dt><kbd>Esc</kbd></dt><dd>Cerrar sin elegir</dd>
         </dl>
       </div>
       <div><h3>Modo Pintar</h3>
@@ -308,9 +347,30 @@
           <dt>Pasar el ratón</dt><dd>Aparecen los botones de girar 90° a la izquierda y a la derecha</dd>
         </dl>
       </div>
+      <div><h3>En Mis favoritas</h3>
+        <dl>
+          <dt>Arrastrar fotos</dt><dd>Soltarlas sobre un tipo de prenda para añadirlas a sus favoritas</dd>
+        </dl>
+      </div>
     </div>
     <div class="dialogo-botones"><button class="btn primario" value="cerrar">Cerrar</button></div>
   </form>
+</dialog>
+
+<!-- Opciones para elegir: capa a pantalla completa -->
+<dialog id="capa-opciones" class="capa-opciones" aria-labelledby="op-titulo">
+  <div class="op-cabecera">
+    <h2 id="op-titulo">Elige la versión que más te guste</h2>
+    <span class="espaciador"></span>
+    <span class="op-ayuda tenue">Pulsa una versión o su número (1 a 4)</span>
+    <button type="button" id="op-cerrar" class="btn">Cerrar sin elegir <kbd>Esc</kbd></button>
+  </div>
+  <p id="op-aviso" class="op-aviso" hidden>Marca fotos con Me gusta para que la app sepa cuál prefieres.</p>
+  <div id="op-cargando" class="op-cargando" role="status">
+    <span class="spinner spinner-grande" aria-hidden="true"></span>
+    <span>Preparando 4 versiones…</span>
+  </div>
+  <div id="op-rejilla" class="op-rejilla" hidden></div>
 </dialog>
 
 <!-- Confirmacion -->
