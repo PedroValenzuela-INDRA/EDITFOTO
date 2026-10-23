@@ -26,6 +26,16 @@ def huella_foto_simulada(img):
 
 
 @pytest.fixture(autouse=True)
+def datos_temporales(tmp_path, monkeypatch):
+    """Ningun test escribe presets ni fotos en la carpeta de la app (en desarrollo, la de los
+    presets de fabrica): todo va a una carpeta temporal."""
+    from editfoto import config, modelos
+
+    monkeypatch.setattr(modelos, "DATOS", tmp_path / "datos_test")
+    monkeypatch.setattr(config, "CARPETA_PRESETS_USUARIO", tmp_path / "datos_test" / "presets")
+
+
+@pytest.fixture(autouse=True)
 def sin_modelo_de_orientacion(monkeypatch):
     """Por defecto la prenda no se gira sola; los tests de orientacion usan un modelo simulado."""
     monkeypatch.setattr(orientacion, "giro_probable", lambda *a, **k: (0, 0.0))

@@ -96,5 +96,7 @@ def test_favoritas_se_guardan_y_la_app_reaprende(entorno, tmp_path):
     assert c.get("/img/ejemplo/camiseta/mi_foto.jpg").status_code == 200
     assert c.put("/api/ejemplos/camiseta/roto.jpg", content=b"no es una foto").status_code == 400
     assert c.get("/img/ejemplo/camiseta/..%2F..%2Fsecreto.jpg").status_code in (400, 404)
-    c.delete("/api/ejemplos/camiseta/mi_foto.jpg")
+    assert c.delete("/api/ejemplos/camiseta/mi_foto.jpg").json()["aprendiendo"] is True
     assert "mi_foto.jpg" not in c.get("/api/ejemplos").json()["presets"]["camiseta"]
+    # Quitar una favorita vuelve a aprender: hay que esperar, que escribe presets.
+    assert esperar_aprendizaje(c)["error"] is None
