@@ -43,7 +43,7 @@ Aprende hacia dónde te gusta cada ajuste y a qué se parecen tus fotos favorita
 La forma normal es descargar **EDITFOTO.exe** de la última versión publicada en [EDITFOTO-Releases](https://github.com/PedroValenzuela-INDRA/EDITFOTO-Releases/releases) y abrirlo con doble clic. No hace falta instalar Python.
 
 - **Aviso de Windows (SmartScreen)**: la primera vez, Windows puede mostrar "Windows protegió su PC". Pulsa **Más información** y después **Ejecutar de todas formas**. Como el programa no tiene firma digital, algún antivirus también puede marcarlo por error.
-- **Primera vez**: descarga los modelos de IA, unos 500 MB, o unos 1,4 GB si hay tarjeta gráfica (añade el modelo de recorte completo, más preciso). El progreso se ve en pantalla.
+- **Primera vez**: descarga los modelos de IA, unos 600 MB, o unos 1,5 GB si hay tarjeta gráfica (añade el modelo de recorte completo, más preciso). El progreso se ve en pantalla.
 - **Actualizaciones**: al abrirlo comprueba si hay una versión nueva, la descarga, se reinicia sola y enseña las novedades.
 - **Tus datos**: las fotos y los presets están en `Documentos\EDITFOTO`, y las actualizaciones no los tocan. Los modelos de IA y el registro de la app (`registro.txt`) están en `%LOCALAPPDATA%\EDITFOTO`.
 
@@ -174,6 +174,7 @@ Los tests usan fotos sintéticas con la respuesta conocida: una sudadera con tex
 | BiRefNet lite / BiRefNet | Recorte | MIT | [onnx-community en HuggingFace](https://huggingface.co/onnx-community/BiRefNet_lite-ONNX) |
 | LaMa | Borrar objetos | Apache 2.0 | [Carve/LaMa-ONNX](https://huggingface.co/Carve/LaMa-ONNX) |
 | DINOv2 small | Poner la prenda derecha, parecido con tus favoritas | Apache 2.0 | [onnx-community/dinov2-small](https://huggingface.co/onnx-community/dinov2-small) |
+| ViTMatte small | Afinar el borde de la prenda | Apache 2.0 | [hustvl/vitmatte-small-composition-1k](https://huggingface.co/hustvl/vitmatte-small-composition-1k) (ONNX de Xenova) |
 | Qwen-Image-Edit-2511 (opcional, en ComfyUI) | Retoque generativo | Apache 2.0 | [Qwen](https://huggingface.co/Qwen/Qwen-Image-Edit-2511) |
 
 Todas estas licencias permiten el uso comercial. Los modelos se descargan la primera vez en `%LOCALAPPDATA%\EDITFOTO\modelos` (en la instalación para desarrollo, en `modelos/`).

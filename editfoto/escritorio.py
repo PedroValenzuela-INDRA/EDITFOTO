@@ -242,6 +242,9 @@ def autoprueba(ruta_resultado: str | None) -> int:
 
             alfa = segmentar.segmentar(img, "birefnet_lite")
             info["recorte"] = "ok (BiRefNet lite)"
+            if modelos._ruta_destino("vitmatte").exists() and (alfa > 0.5).sum() > 2000:
+                _, texto = segmentar.afinar_bordes(img, alfa)
+                info["bordes"] = f"ok (ViTMatte: {texto or 'sin cambios'})"
         capas = pipeline.Capas()
         if modelos._ruta_destino("lama").exists():
             capas.borrar = np.zeros((600, 800), np.float32)

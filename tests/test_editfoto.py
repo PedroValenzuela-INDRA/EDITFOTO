@@ -372,26 +372,32 @@ def test_pulir_bordes_no_borra_el_tope_de_la_cremallera():
     assert alfa2[tope].mean() > 0.99
 
 
-def test_refinar_bordes_arregla_el_mordisco_y_descarta_zonas_malas(monkeypatch):
-    from editfoto import segmentar
+def test_afinar_bordes_recupera_la_esquina_y_no_se_fia_de_un_mate_raro(monkeypatch):
+    import importlib
 
+    from editfoto import modelos, segmentar
+
+    segmentar = importlib.reload(segmentar)  # la funcion de verdad, no la simulada de conftest
     img = np.full((800, 800, 3), 0.8, np.float32)
     prenda = np.zeros((800, 800), bool)
     prenda[150:650, 200:600] = True
     img[prenda] = 0.2
     con_mordisco = prenda.copy()
-    con_mordisco[625:650, 575:600] = False  # la esquina del puno que el recorte general pierde (5 % del tamano)
+    con_mordisco[625:650, 575:600] = False  # la esquina del puno que el recorte general pierde
 
-    # A mas resolucion el "modelo" ve bien la prenda...
-    monkeypatch.setattr(segmentar, "segmentar", lambda im, modelo="auto": (im.mean(axis=2) < 0.5).astype(np.float32))
-    alfa, zonas = segmentar.refinar_bordes(img, con_mordisco.astype(np.float32))
-    assert zonas > 0 and alfa[625:650, 575:600].mean() > 0.95
-    assert np.abs(alfa - prenda).mean() < 0.002  # fuera de la esquina, nada cambia
+    def mate_por_color(nombre, entradas):  # ViTMatte simulado: ve bien la prenda oscura
+        x = entradas["pixel_values"]
+        return [(x[:, :3].mean(axis=1, keepdims=True) < 0).astype(np.float32)]
 
-    # ...pero si en una zona se confunde (sin el resto de la foto), esa zona no se usa.
-    monkeypatch.setattr(segmentar, "segmentar", lambda im, modelo="auto": np.zeros(im.shape[:2], np.float32))
-    alfa, zonas = segmentar.refinar_bordes(img, con_mordisco.astype(np.float32))
-    assert zonas == 0 and np.array_equal(alfa, con_mordisco.astype(np.float32))
+    monkeypatch.setattr(modelos, "ejecutar", mate_por_color)
+    alfa, texto = segmentar.afinar_bordes(img, con_mordisco.astype(np.float32))
+    assert alfa[625:650, 575:600].mean() > 0.95 and "afinados" in texto
+    assert np.abs(alfa - prenda).mean() < 0.002
+
+    # Si el mate cambia demasiado la prenda (se ha confundido), se queda el recorte general.
+    monkeypatch.setattr(modelos, "ejecutar", lambda n, e: [np.ones_like(e["pixel_values"][:, :1])])
+    alfa, texto = segmentar.afinar_bordes(img, con_mordisco.astype(np.float32))
+    assert np.array_equal(alfa, con_mordisco.astype(np.float32)) and "sin afinar" in texto
 
 
 def test_ganancias_con_fondo_de_color_puro_no_dan_nan():

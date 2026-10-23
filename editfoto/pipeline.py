@@ -35,10 +35,13 @@ def analizar(img: np.ndarray, preset: dict) -> tuple[np.ndarray, dict | None]:
     """Recorte con IA y medida del fondo. Devuelve (alfa_bruto, medida_fondo)."""
     alfa = segmentar.segmentar(img, preset["segmentacion"]["modelo"])
     m = preset["mascara"]
-    refinar = m.get("refinar_bordes", "auto")
-    if refinar is True or refinar == "si" or (refinar == "auto" and modelos.hay_gpu()):
-        # Segundo recorte del borde por zonas, a mas resolucion (con la grafica son segundos).
-        alfa, _ = segmentar.refinar_bordes(img, alfa, preset["segmentacion"]["modelo"])
+    if m.get("afinar_bordes", True):
+        # Borde a resolucion completa con ViTMatte: puntas de punos, bajos, pelusa.
+        try:
+            _, principal = mascara.limpiar(alfa, m["min_componente"], m["max_hueco"], m["quitar_cables"])
+            alfa, _ = segmentar.afinar_bordes(img, np.where(principal, np.maximum(alfa, 0.51), np.minimum(alfa, 0.49)))
+        except Exception as e:  # sin el modelo, el recorte de siempre
+            print(f"Aviso: no se han podido afinar los bordes: {modelos.texto_error(e)}", flush=True)
     _, prenda = mascara.limpiar(alfa, m["min_componente"], m["max_hueco"], m["quitar_cables"])
     return alfa, color.medir_fondo(img, prenda)
 

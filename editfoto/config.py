@@ -78,7 +78,7 @@ POR_DEFECTO: dict = {
     # Endereza la prenda buscando su eje de simetria (como mucho max_grados).
     "enderezar": {"activo": True, "max_grados": 6.0},
     "mascara": {"min_componente": 0.08, "max_hueco": 0.004, "quitar_cables": True, "pulir_bordes": True,
-                "refinar_bordes": "auto"},
+                "afinar_bordes": True},
     "nitidez": 0.3,
     "segmentacion": {"modelo": "auto"},
     "salida": {"calidad_jpg": 92, "max_lado_trabajo": 2400},

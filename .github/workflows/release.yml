@@ -71,13 +71,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: modelos_prueba
-          key: modelos-birefnet-lite-lama-dinov2-v2
+          key: modelos-birefnet-lite-lama-dinov2-vitmatte-v3
 
       - name: Descargar modelos si no estan en cache
         shell: bash
         env:
           EDITFOTO_MODELOS: ${{ github.workspace }}/modelos_prueba
-        run: python -c "from editfoto import modelos; [print(modelos.ruta_modelo(n)) for n in ('birefnet_lite', 'lama', 'dinov2')]"
+        run: python -c "from editfoto import modelos; [print(modelos.ruta_modelo(n)) for n in ('birefnet_lite', 'lama', 'dinov2', 'vitmatte')]"
 
       - name: Compilar EDITFOTO.exe
         run: pyinstaller --noconfirm --clean EDITFOTO.spec

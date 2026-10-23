@@ -41,3 +41,6 @@ def sin_modelo_de_orientacion(monkeypatch):
     monkeypatch.setattr(orientacion, "giro_probable", lambda *a, **k: (0, 0.0))
     monkeypatch.setattr(orientacion, "huella", lambda *a, **k: None)
     monkeypatch.setattr(orientacion, "huella_foto", huella_foto_simulada)
+    from editfoto import segmentar  # ViTMatte tampoco se descarga: bordes tal cual
+
+    monkeypatch.setattr(segmentar, "afinar_bordes", lambda img, alfa, **k: (alfa, ""))

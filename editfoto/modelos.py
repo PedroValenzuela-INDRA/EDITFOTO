@@ -39,6 +39,9 @@ MODELOS = {
     # Vision general: sabe hacia donde va el cuello de una prenda (para ponerla derecha).
     "dinov2": ModeloInfo("onnx-community/dinov2-small", "onnx/model.onnx",
                          "DINOv2 small (poner la prenda derecha)", "Apache-2.0"),
+    # Bordes finos: punos, bajos, pelusa (matting guiado por el recorte general).
+    "vitmatte": ModeloInfo("Xenova/vitmatte-small-composition-1k", "onnx/model.onnx",
+                           "ViTMatte small (bordes finos)", "Apache-2.0"),
 }
 
 _sesiones: dict[str, object] = {}
@@ -115,7 +118,7 @@ def ruta_modelo(nombre: str, descargar: bool = True) -> Path:
 
 def modelos_necesarios() -> list[str]:
     # Primero los pequenos, para poder trabajar mientras baja el grande.
-    return ["birefnet_lite", "dinov2", "lama"] + (["birefnet"] if hay_gpu() else [])
+    return ["birefnet_lite", "dinov2", "vitmatte", "lama"] + (["birefnet"] if hay_gpu() else [])
 
 
 def estado_modelos() -> dict:
@@ -248,7 +251,7 @@ def probar_acelerador() -> dict:
 
 def descargar_todos(incluir_completo: bool | None = None) -> None:
     nombres = modelos_necesarios() if incluir_completo is None else (
-        ["birefnet_lite", "dinov2", "lama"] + (["birefnet"] if incluir_completo else []))
+        ["birefnet_lite", "dinov2", "vitmatte", "lama"] + (["birefnet"] if incluir_completo else []))
     for n in nombres:
         p = ruta_modelo(n)
         print(f"  OK {MODELOS[n].descripcion}: {p} ({p.stat().st_size // (1 << 20)} MB, licencia {MODELOS[n].licencia})")
