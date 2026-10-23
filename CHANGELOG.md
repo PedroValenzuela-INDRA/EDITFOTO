@@ -3,7 +3,7 @@
 Cada entrada es lo que ves en "Novedades" al actualizarse la app. El formato de la
 cabecera es `## vX.Y.Z · AAAA-MM-DD · Titulo`.
 
-## v0.2.0 · 2026-10-22 · EDITFOTO.exe: se instala y se actualiza solo
+## v0.2.0 · 2026-10-23 · EDITFOTO.exe: se instala y se actualiza solo
 
 - **Un solo programa, EDITFOTO.exe**, como INDRA HUB: no hace falta instalar Python ni nada mas. Cada vez que lo abres comprueba si hay una version nueva, la descarga y se reinicia solo.
 - **Ventana propia** en vez del navegador.
