@@ -2228,7 +2228,7 @@ async function vigilarAprendizaje(recienPedido = false) {
 
 function finAprendizaje(est) {
   if (est.error) avisar('No se ha podido aprender de tus favoritas: ' + est.error, 'error');
-  else avisar(est.mensaje || 'La app ha terminado de aprender de tus favoritas.', 'ok');
+  else avisar(est.mensaje ? 'Aprendizaje terminado: ' + est.mensaje : 'La app ha terminado de aprender de tus favoritas.', 'ok');
   refrescarTrasAprender();
 }
 

@@ -555,9 +555,11 @@ details[open] > summary { margin-bottom: 8px; }
   font-weight: 600;
 }
 .op-cargando {
-  flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 14px;
+  flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
   font-size: 18px; color: var(--suave);
 }
+.op-cargando-fila { display: flex; align-items: center; gap: 14px; }
+.op-cargando-sub { font-size: 13px; color: var(--tenue); }
 .op-rejilla {
   flex: 1 1 auto; min-height: 0;
   display: grid; gap: 12px;
@@ -658,9 +660,9 @@ details[open] > summary { margin-bottom: 8px; }
   .vista-presets { grid-template-columns: 1fr; }
   .presets-lista-caja { position: static; }
   .fav-arrastrar { margin-left: 0; flex-basis: 100%; }
-  .op-rejilla { grid-template-columns: 1fr; grid-template-rows: none; align-content: start; overflow-y: auto; }
-  .op-tarjeta { min-height: auto; }
-  .op-imagen { flex: none; aspect-ratio: 3 / 4; max-height: 75vh; }
+  .op-rejilla { display: flex; flex-direction: column; overflow-y: auto; }
+  .op-tarjeta { flex: none; }
+  .op-imagen { flex: none; height: min(70vh, 125vw); }
 }
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: .01ms !important; transition-duration: .01ms !important; }

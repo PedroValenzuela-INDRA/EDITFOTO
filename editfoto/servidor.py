@@ -199,7 +199,9 @@ def crear_app(proyecto: Proyecto) -> FastAPI:
     @app.delete("/api/ejemplos/{preset}/{nombre}")
     def borrar_ejemplo(preset: str, nombre: str):
         autoaprendizaje.borrar_ejemplo(preset, nombre)
-        return {"ok": True}
+        # Sin esa foto, la app vuelve a aprender (si quedan favoritas).
+        quedan = any(autoaprendizaje.listar_ejemplos().values())
+        return {"ok": True, "aprendiendo": bool(quedan and reaprender_en_segundo_plano())}
 
     @app.get("/img/ejemplo/{preset}/{nombre}")
     def img_ejemplo(preset: str, nombre: str, max: int = 480):
