@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from . import arrugas, color, composicion, forma, inpaint, mascara, segmentar
+from . import arrugas, color, composicion, forma, inpaint, mascara, modelos, segmentar
 from .config import AJUSTES_FOTO, fusionar
 from .imagen import cargar, reducir
 
@@ -35,6 +35,10 @@ def analizar(img: np.ndarray, preset: dict) -> tuple[np.ndarray, dict | None]:
     """Recorte con IA y medida del fondo. Devuelve (alfa_bruto, medida_fondo)."""
     alfa = segmentar.segmentar(img, preset["segmentacion"]["modelo"])
     m = preset["mascara"]
+    refinar = m.get("refinar_bordes", "auto")
+    if refinar is True or refinar == "si" or (refinar == "auto" and modelos.hay_gpu()):
+        # Segundo recorte del borde por zonas, a mas resolucion (con la grafica son segundos).
+        alfa, _ = segmentar.refinar_bordes(img, alfa, preset["segmentacion"]["modelo"])
     _, prenda = mascara.limpiar(alfa, m["min_componente"], m["max_hueco"], m["quitar_cables"])
     return alfa, color.medir_fondo(img, prenda)
 
@@ -61,6 +65,10 @@ def renderizar(img: np.ndarray, alfa_bruto: np.ndarray, preset: dict, ajustes: d
 
     alfa = mascara_final(alfa_bruto, preset, capas)
     img = inpaint.borrar(img, capas.borrar)
+    if preset["mascara"].get("pulir_bordes", True):
+        respetar = [c for c in (capas.sumar, capas.proteger) if c is not None]
+        img, alfa, info_bordes = mascara.pulir_bordes(img, alfa, np.maximum.reduce(respetar) if respetar else None)
+        info.update(info_bordes)
 
     c = preset["color"]
     g = color.ganancias(medida_fondo, referencia_fondo, c["igualar_con_fondo"], c["balance_blancos"])

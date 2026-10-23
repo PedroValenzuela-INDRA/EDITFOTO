@@ -39,6 +39,10 @@ POR_DEFECTO: dict = {
     # Poner la prenda derecha sola (cuello o cintura arriba) con un modelo de vision local.
     # "huellas" las rellena "aprender" con tus ejemplos; sin ellas se usa una coleccion generica.
     "orientacion": {"auto": True, "huellas": None},
+    # Tus fotos favoritas enteras (las rellena "aprender"): para puntuar las opciones de una foto.
+    "estilo": {"huellas": None},
+    # Lo que la app va aprendiendo de las opciones que eliges (lo rellena "elegir").
+    "aprendizaje": {"elecciones": 0, "historial": []},
     # tipo: "color" (fondo liso), "imagen" (tu fondo favorito) u "original" (se deja el fondo de la foto).
     "fondo": {"tipo": "color", "color": "#F4F4F2", "imagen": ""},
     # Sombra suave bajo la prenda para que no parezca pegada. Valores relativos al tamano de la prenda.
@@ -59,7 +63,8 @@ POR_DEFECTO: dict = {
     "arrugas": {"fuerza": 0.5, "escala": 0.10, "respeto_bordes": 0.5},
     # Endereza la prenda buscando su eje de simetria (como mucho max_grados).
     "enderezar": {"activo": True, "max_grados": 6.0},
-    "mascara": {"min_componente": 0.08, "max_hueco": 0.004, "quitar_cables": True},
+    "mascara": {"min_componente": 0.08, "max_hueco": 0.004, "quitar_cables": True, "pulir_bordes": True,
+                "refinar_bordes": "auto"},
     "nitidez": 0.3,
     "segmentacion": {"modelo": "auto"},
     "salida": {"calidad_jpg": 92, "max_lado_trabajo": 2400},

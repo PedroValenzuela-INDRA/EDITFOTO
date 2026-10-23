@@ -328,3 +328,67 @@ def test_giro_de_90_grados_se_conserva(tmp_path, ia_falsa):
     for _ in range(3):
         f = c.post("/api/fotos/tumbada/girar", json={"sentido": 1}).json()
     assert f["ajustes"]["giro90"] == 0 and (f["ancho"], f["alto"]) == (900, 1200)
+
+
+def test_pulir_bordes_quita_pelos_de_alfombra_y_respeta_el_puno():
+    """Pelos claros de la alfombra que tapan el borde de una prenda oscura se quitan; un puno
+    del mismo color que el suelo (pieza grande, de la prenda) se queda."""
+    rng = np.random.default_rng(3)
+    h, w = 700, 700
+    suelo = np.clip(0.8 + rng.normal(0, 0.03, (h, w, 1)), 0, 1) * np.array([1.0, 0.95, 0.85], np.float32)
+    img = suelo.astype(np.float32).copy()
+    prenda = np.zeros((h, w), bool)
+    prenda[100:560, 120:580] = True
+    img[prenda] = (0.22, 0.15, 0.12)  # sudadera marron oscura
+    puno = np.zeros((h, w), bool)
+    puno[500:560, 120:300] = True  # puno claro, del color del suelo, de 60 px de alto
+    img[puno] = suelo[puno]
+    pelos = np.zeros((h, w), np.uint8)
+    for x in range(330, 560, 23):  # hebras que entran desde abajo
+        cv2.line(pelos, (x, 575), (x + 6, 551), 1, 2)  # entran ~2 % del tamano, como en la foto real
+    pelos = pelos.astype(bool) & prenda
+    img[pelos] = suelo[pelos]
+    alfa = prenda.astype(np.float32)  # el recorte se ha tragado los pelos como prenda
+
+    img2, alfa2, info = mascara.pulir_bordes(img, alfa)
+    assert alfa2[puno].mean() > 0.99, "el puno claro es prenda"
+    assert (alfa2[pelos] > 0.5).mean() > 0.95, "lo tapado sigue siendo prenda (sin mordiscos)"
+    # Donde estaban los pelos ahora hay color de prenda, no de alfombra.
+    assert np.abs(img2[pelos] - np.array([0.22, 0.15, 0.12])).max(axis=1).mean() < 0.08
+    assert np.array_equal(img2[150:450, 200:500], img[150:450, 200:500]), "dentro de la prenda no se toca"
+
+
+def test_pulir_bordes_no_borra_el_tope_de_la_cremallera():
+    """Una pieza maciza y clara en el borde (tope metalico) no es pelusa: se queda."""
+    h, w = 600, 600
+    img = np.full((h, w, 3), (0.78, 0.74, 0.66), np.float32)  # alfombra beige lisa
+    prenda = np.zeros((h, w), bool)
+    prenda[80:500, 100:500] = True
+    img[prenda] = (0.2, 0.14, 0.11)
+    tope = np.zeros((h, w), bool)
+    tope[484:500, 292:308] = True  # 16 x 16 px, plateado, pegado al bajo
+    img[tope] = (0.72, 0.72, 0.7)
+    _, alfa2, _ = mascara.pulir_bordes(img, prenda.astype(np.float32))
+    assert alfa2[tope].mean() > 0.99
+
+
+def test_refinar_bordes_arregla_el_mordisco_y_descarta_zonas_malas(monkeypatch):
+    from editfoto import segmentar
+
+    img = np.full((800, 800, 3), 0.8, np.float32)
+    prenda = np.zeros((800, 800), bool)
+    prenda[150:650, 200:600] = True
+    img[prenda] = 0.2
+    con_mordisco = prenda.copy()
+    con_mordisco[625:650, 575:600] = False  # la esquina del puno que el recorte general pierde (5 % del tamano)
+
+    # A mas resolucion el "modelo" ve bien la prenda...
+    monkeypatch.setattr(segmentar, "segmentar", lambda im, modelo="auto": (im.mean(axis=2) < 0.5).astype(np.float32))
+    alfa, zonas = segmentar.refinar_bordes(img, con_mordisco.astype(np.float32))
+    assert zonas > 0 and alfa[625:650, 575:600].mean() > 0.95
+    assert np.abs(alfa - prenda).mean() < 0.002  # fuera de la esquina, nada cambia
+
+    # ...pero si en una zona se confunde (sin el resto de la foto), esa zona no se usa.
+    monkeypatch.setattr(segmentar, "segmentar", lambda im, modelo="auto": np.zeros(im.shape[:2], np.float32))
+    alfa, zonas = segmentar.refinar_bordes(img, con_mordisco.astype(np.float32))
+    assert zonas == 0 and np.array_equal(alfa, con_mordisco.astype(np.float32))
