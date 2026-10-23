@@ -30,7 +30,8 @@ La app consulta la última Release del repositorio público sin token, así que 
    - Repository access: Only select repositories, y marca solo `EDITFOTO-Releases`.
    - Permissions > Repository permissions > Contents: **Read and write**.
    - Copia el token. Empieza por `github_pat_` y GitHub no lo vuelve a mostrar.
-   - Si ya tienes el token de INDRA HUB, puedes editarlo y añadir `EDITFOTO-Releases` a sus repositorios, en vez de crear otro.
+   - Mejor un token nuevo que reutilizar el de INDRA HUB: de ese ya no puedes volver a ver el valor, y regenerarlo rompería la publicación de INDRA HUB.
+   - El token no se comparte con nadie (tampoco con Claude): solo se pega en el secreto del paso 4. Si se filtra, bórralo en GitHub y crea otro.
 
 4. **Guarda el token como secreto en `EDITFOTO`.** Ve a Settings > Secrets and variables > Actions > New repository secret. El nombre tiene que ser `RELEASES_TOKEN` y el valor, el token del paso anterior.
 
