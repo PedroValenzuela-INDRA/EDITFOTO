@@ -59,11 +59,13 @@ def ganancias(fondo: dict | None, referencia: list[float] | None, igualar: bool,
         objetivo = np.array(referencia, dtype=np.float32)
     if balance and es_neutro(objetivo):
         objetivo = np.full(3, objetivo.mean(), dtype=np.float32)
-    g = objetivo / np.maximum(medido, 1e-4)
+    # Un fondo con un canal a cero (un fondo de color puro) daria log(0): se acota.
+    g = np.maximum(objetivo, 1e-4) / np.maximum(medido, 1e-4)
     # Limites prudentes: corrige la camara, no reinventa la foto.
     exposicion = float(np.clip(np.exp(np.mean(np.log(g))), 0.6, 1.8))
     tinte = np.clip(g / np.exp(np.mean(np.log(g))), 0.85, 1.18)
-    return (tinte * exposicion).astype(np.float32)
+    resultado = (tinte * exposicion).astype(np.float32)
+    return resultado if np.isfinite(resultado).all() else np.ones(3, dtype=np.float32)
 
 
 def aplicar(img: np.ndarray, g: np.ndarray, brillo: float = 0.0, contraste: float = 0.0,

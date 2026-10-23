@@ -392,3 +392,8 @@ def test_refinar_bordes_arregla_el_mordisco_y_descarta_zonas_malas(monkeypatch):
     monkeypatch.setattr(segmentar, "segmentar", lambda im, modelo="auto": np.zeros(im.shape[:2], np.float32))
     alfa, zonas = segmentar.refinar_bordes(img, con_mordisco.astype(np.float32))
     assert zonas == 0 and np.array_equal(alfa, con_mordisco.astype(np.float32))
+
+
+def test_ganancias_con_fondo_de_color_puro_no_dan_nan():
+    g = color.ganancias({"rgb": [1.0, 0.0, 1.0], "uniforme": True}, [0.5, 0.5, 0.5], True, True)
+    assert np.isfinite(g).all()

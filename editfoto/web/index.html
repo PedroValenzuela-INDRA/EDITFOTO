@@ -93,6 +93,7 @@
         <div class="d-titulo">
           <strong id="d-nombre" class="d-nombre"></strong>
           <span id="d-estado" class="insignia-estado"></span>
+          <span id="d-generada" class="insignia-gen" title="La IA ha rehecho una zona de esta foto (la inventa): revisa que coincide con tu prenda" hidden>Retoque generativo</span>
           <span id="d-pos" class="tenue"></span>
         </div>
         <div class="modos" role="tablist" aria-label="Modo del visor">
@@ -109,6 +110,7 @@
           <button type="button" id="d-sig" class="btn icono-g" title="Foto siguiente (flecha derecha)" aria-label="Foto siguiente">&rarr;</button>
           <button type="button" id="d-megusta" class="btn" title="Guardar esta foto en tus favoritas para que la app aprenda de ella (F)">Me gusta <kbd>F</kbd></button>
           <button type="button" id="d-opciones" class="btn" title="Ver 4 versiones de esta foto y elegir la que más te guste (O)">Ver opciones <kbd>O</kbd></button>
+          <button type="button" id="d-generativo" class="btn" title="Doblar el bajo o abrir las mangas con IA generativa. Necesita ComfyUI abierto en este PC (G)">Retoque generativo <kbd>G</kbd></button>
           <button type="button" id="d-aprobar" class="btn exito" title="Aprobar y pasar a la siguiente (A)">Aprobar y siguiente <kbd>A</kbd></button>
         </div>
       </div>
@@ -159,6 +161,7 @@
       </div>
 
       <p class="nota-ia">La IA no inventa nada: recorta, borra solo lo que tú marcas y, con "Forma del ejemplo", dobla la foto real. Los desperfectos se siguen viendo.</p>
+      <p id="nota-generada" class="nota-ia nota-gen" hidden>Esta foto lleva retoque generativo: la IA ha inventado la zona retocada (el forro, una costura…). Comprueba que coincide con tu prenda real.</p>
     </div>
 
     <aside id="panel" class="panel-derecho" aria-label="Ajustes de la foto">
@@ -317,12 +320,19 @@
           <dt><kbd>Mayús</kbd>+<kbd>R</kbd></dt><dd>Girar la foto 90° a la izquierda</dd>
           <dt><kbd>F</kbd></dt><dd>Me gusta: guardar la foto en tus favoritas</dd>
           <dt><kbd>O</kbd></dt><dd>Ver 4 versiones y elegir una</dd>
+          <dt><kbd>G</kbd></dt><dd>Retoque generativo: doblar el bajo o abrir las mangas (necesita ComfyUI)</dd>
         </dl>
       </div>
       <div><h3>Al ver las opciones</h3>
         <dl>
           <dt><kbd>1</kbd> a <kbd>4</kbd></dt><dd>Elegir esa versión</dd>
           <dt><kbd>Esc</kbd></dt><dd>Cerrar sin elegir</dd>
+        </dl>
+      </div>
+      <div><h3>Al ver el retoque generativo</h3>
+        <dl>
+          <dt><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd>&hellip;</dt><dd>Elegir esa versión</dd>
+          <dt><kbd>Esc</kbd></dt><dd>Descartar todas y cerrar (o cancelar, si está generando)</dd>
         </dl>
       </div>
       <div><h3>Modo Pintar</h3>
@@ -374,6 +384,66 @@
     <span class="op-cargando-sub">Puede tardar medio minuto o más.</span>
   </div>
   <div id="op-rejilla" class="op-rejilla" hidden></div>
+</dialog>
+
+<!-- Retoque generativo: capa a pantalla completa (reutiliza los estilos de las opciones) -->
+<dialog id="capa-generativo" class="capa-opciones capa-generativo" aria-labelledby="gen-titulo">
+  <div class="op-cabecera">
+    <h2 id="gen-titulo">Retoque generativo</h2>
+    <span class="espaciador"></span>
+    <span id="gen-ayuda" class="op-ayuda tenue" hidden></span>
+    <button type="button" id="gen-cerrar" class="btn">Cerrar <kbd>Esc</kbd></button>
+  </div>
+  <p class="op-aviso gen-aviso" role="note">La IA inventa lo que hay dentro de la zona (el forro, una costura…). Revisa siempre que coincide con tu prenda: en Vinted la foto debe mostrar el artículo real.</p>
+  <div id="gen-error" class="aviso-error gen-error" role="alert" hidden></div>
+
+  <div id="gen-panel" class="gen-panel">
+    <div class="gen-columna">
+      <section id="gen-estado" class="bloque gen-estado" aria-label="Estado de la IA">
+        <h3>Estado de la IA</h3>
+        <p id="gen-estado-texto" class="gen-estado-texto" role="status">Comprobando ComfyUI…</p>
+        <ul id="gen-estado-lista" class="gen-lista" hidden></ul>
+        <p id="gen-estado-guia" class="ayuda" hidden>Necesita ComfyUI abierto en este PC con el modelo Qwen-Image-Edit. Guía: docs/GENERATIVO.md (en la carpeta de la app)</p>
+        <button type="button" id="gen-comprobar" class="btn pequeno" hidden>Comprobar otra vez</button>
+      </section>
+
+      <section id="gen-ajustes" class="bloque" aria-label="Qué retocar">
+        <h3>Zona</h3>
+        <div id="gen-zonas" class="gen-zonas" role="group" aria-label="Zona que se retoca">
+          <button type="button" class="btn" data-zona="bajo" aria-pressed="true">Doblar el bajo</button>
+          <button type="button" class="btn" data-zona="mangas" aria-pressed="false">Abrir las mangas</button>
+          <button type="button" class="btn" data-zona="todo" aria-pressed="false">Toda la prenda</button>
+        </div>
+        <p id="gen-zona-ayuda" class="ayuda"></p>
+        <label class="campo" for="gen-instruccion">Instrucción opcional
+          <input type="text" id="gen-instruccion" maxlength="500" autocomplete="off" placeholder="Opcional, mejor en inglés. Vacío = la instrucción de la zona">
+        </label>
+      </section>
+
+      <div id="gen-acciones" class="gen-acciones">
+        <button type="button" id="gen-generar" class="btn primario" disabled>Generar</button>
+        <span class="ayuda">Se generan varias versiones y tú eliges. Puede tardar varios minutos. Al elegir una, la prenda se vuelve a recortar a partir de ella.</span>
+      </div>
+
+      <div id="gen-progreso" class="bloque gen-progreso" hidden>
+        <div class="gen-progreso-fila">
+          <span class="spinner spinner-grande" aria-hidden="true"></span>
+          <span id="gen-progreso-texto" class="gen-progreso-texto" role="status">Preparando la generación…</span>
+          <span class="espaciador"></span>
+          <button type="button" id="gen-cancelar" class="btn peligro">Cancelar</button>
+        </div>
+        <div class="barra" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Progreso de la generación"><div id="gen-relleno" class="barra-relleno"></div></div>
+      </div>
+
+      <section id="gen-quitar-bloque" class="bloque" hidden>
+        <h3>Retoque actual</h3>
+        <p class="ayuda">Esta foto ya tiene un retoque generativo. Si generas otra vez, se parte de la foto ya retocada; quítalo para volver a la foto original.</p>
+        <div class="fila-botones"><button type="button" id="gen-quitar" class="btn peligro">Quitar retoque generativo</button></div>
+      </section>
+    </div>
+  </div>
+
+  <div id="gen-rejilla" class="gen-rejilla" hidden></div>
 </dialog>
 
 <!-- Confirmacion -->

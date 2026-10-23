@@ -4,7 +4,8 @@
    EDITFOTO - interfaz web local (JavaScript puro, sin dependencias)
    Secciones: utilidades, API y avisos, estado, rejilla, procesado por
    lotes, detalle (con giro de 90 grados), pintor, presets, autoaprendizaje
-   (Me gusta, opciones para elegir y Mis favoritas), app de escritorio
+   (Me gusta, opciones para elegir y Mis favoritas), retoque generativo
+   (ComfyUI local, opcional), app de escritorio
    (modelos, actualizacion, novedades, carpetas, salir), teclado y arranque.
    ===================================================================== */
 
@@ -269,8 +270,12 @@ let cargasImg = 0;
 /** Cuartos de vuelta horarios que lleva la foto (ajustes.giro90, de 0 a 3). */
 const giroDe = (f) => Number((f && f.ajustes && f.ajustes.giro90) || 0) || 0;
 
+/** id -> sello que cambia al aplicar o quitar un retoque generativo (la imagen de trabajo cambia y no debe quedarse la vieja). */
+const SELLO_GEN = new Map();
+
 /** URL de la imagen original de trabajo. El ?v= cambia con el giro para que se recargue al girar. */
-const urlOriginal = (f, max) => `/img/${f.id}/original?` + (max ? `max=${max}&` : '') + `v=${giroDe(f)}`;
+const urlOriginal = (f, max) =>
+  `/img/${f.id}/original?` + (max ? `max=${max}&` : '') + `v=${giroDe(f)}` + (SELLO_GEN.has(f.id) ? `&g=${SELLO_GEN.get(f.id)}` : '');
 
 function ponerImagen(img, url) {
   if (img._url === url && img._promesa) return img._promesa;
@@ -374,7 +379,12 @@ function crearTarjeta(f) {
   const t = crear(
     'article',
     { class: 'tarjeta', 'data-id': f.id, tabindex: '0', role: 'button' },
-    crear('div', { class: 'miniatura' }, crear('img', { alt: '', loading: 'lazy', decoding: 'async', draggable: 'false' })),
+    crear(
+      'div',
+      { class: 'miniatura' },
+      crear('img', { alt: '', loading: 'lazy', decoding: 'async', draggable: 'false' }),
+      crear('span', { class: 'insignia-gen', title: 'Retoque generativo: la IA ha inventado la zona retocada', hidden: true, texto: 'Retoque generativo' })
+    ),
     crear('label', { class: 'casilla', title: 'Aprobada' }, crear('input', { type: 'checkbox', 'aria-label': 'Foto aprobada' })),
     crear(
       'div',
@@ -441,6 +451,7 @@ function tarjetaActualizar(f) {
   const ins = $('.insignia-estado', t);
   ins.className = 'insignia-estado' + (clase ? ' ' + clase : '');
   ins.textContent = texto;
+  $('.insignia-gen', t).hidden = !f.generada;
   const casilla = $('.casilla input', t);
   casilla.checked = !!f.aprobada;
   casilla.disabled = !lista;
@@ -449,7 +460,7 @@ function tarjetaActualizar(f) {
   err.hidden = !(f.estado === 'error' && f.error);
   err.textContent = f.error || '';
   err.title = f.error || '';
-  t.setAttribute('aria-label', `${f.nombre}, ${texto}`);
+  t.setAttribute('aria-label', `${f.nombre}, ${texto}` + (f.generada ? ', con retoque generativo' : ''));
   t.hidden = !(FILTROS[S.filtro] || FILTROS.todas)(f);
   return t;
 }
@@ -732,6 +743,7 @@ function mostrarVista(v) {
 async function aplicarRuta() {
   const r = leerRuta();
   if (O.abierta) cerrarOpciones();
+  if (G.abierta) cerrarGenerativo();
   if (S.vista === 'detalle' && !(r.vista === 'detalle')) salirDelDetalle();
   if (r.vista === 'detalle') {
     await mostrarDetalle(r.id);
@@ -1077,6 +1089,8 @@ function pintarCabeceraDetalle() {
   if (!f) return;
   $('#d-nombre').textContent = f.carpeta ? `${f.carpeta}/${f.nombre}` : f.nombre;
   $('#d-nombre').title = f.ruta;
+  $('#d-generada').hidden = !f.generada;
+  $('#nota-generada').hidden = !f.generada;
   const [clase, texto] = estadoVisible(f);
   const ins = $('#d-estado');
   ins.className = 'insignia-estado' + (clase ? ' ' + clase : '');
@@ -2419,6 +2433,417 @@ function opcionesTecla(e) {
   }
 }
 
+/* ---- Retoque generativo (ComfyUI local, opcional) ---- */
+
+const ZONAS = {
+  bajo: 'Dobla el bajo hacia arriba y hacia fuera para que se vea el forro.',
+  mangas: 'Abre las mangas hacia fuera, planas y simétricas.',
+  todo: 'Recoloca toda la prenda como en una foto plana, simétrica y lisa.',
+};
+
+const G = {
+  abierta: false,
+  id: null,
+  token: 0, // cambia al abrir y al cerrar la capa: lo asíncrono viejo se descarta
+  vig: 0, // identifica al vigilante de la generación en curso
+  tokenIA: 0,
+  fase: 'config', // config | generando | versiones
+  ia: null, // última respuesta de /api/generativo
+  comprobando: false,
+  zona: 'bajo',
+  ultimaFoto: null,
+  cancelando: false,
+  eligiendo: false,
+  indices: [], // versiones que se están viendo
+};
+
+/** Los errores van dentro de la capa: un aviso flotante quedaría tapado por el diálogo modal. */
+function generativoError(texto) {
+  const e = $('#gen-error');
+  e.textContent = texto || '';
+  e.hidden = !texto;
+}
+
+function generativoZona(zona) {
+  if (!ZONAS[zona]) return;
+  G.zona = zona;
+  for (const b of $$('#gen-zonas .btn')) b.setAttribute('aria-pressed', String(b.dataset.zona === zona));
+  $('#gen-zona-ayuda').textContent = ZONAS[zona];
+}
+
+/** Muestra lo que toca en cada fase y deja los textos de la cabecera a juego. */
+function generativoFase(fase) {
+  G.fase = fase;
+  const conf = fase === 'config';
+  const gen = fase === 'generando';
+  const ver = fase === 'versiones';
+  const f = S.porId.get(G.id);
+  $('#gen-panel').hidden = ver;
+  $('#gen-rejilla').hidden = !ver;
+  $('#gen-acciones').hidden = !conf;
+  $('#gen-progreso').hidden = !gen;
+  $('#gen-quitar-bloque').hidden = !(conf && f && f.generada);
+  $('#gen-titulo').textContent = ver ? 'Elige la versión que quieras aplicar' : 'Retoque generativo';
+  const ayuda = $('#gen-ayuda');
+  ayuda.hidden = !ver;
+  ayuda.textContent = ver
+    ? (G.indices.length > 1 ? `Pulsa una versión o su número (1 a ${G.indices.length})` : 'Pulsa la versión o la tecla 1')
+    : '';
+  const cerrar = $('#gen-cerrar');
+  cerrar.style.visibility = gen ? 'hidden' : ''; // sin quitarlo, la cabecera cambia de alto
+  cerrar.replaceChildren(ver ? 'Descartar todas ' : 'Cerrar ', crear('kbd', { texto: 'Esc' }));
+  for (const b of $$('#gen-zonas .btn')) b.disabled = !conf;
+  $('#gen-instruccion').disabled = !conf;
+  generativoPintarIA();
+}
+
+/** Pinta el estado de ComfyUI y activa o no el botón Generar. */
+function generativoPintarIA() {
+  const ia = G.ia;
+  const caja = $('#gen-estado');
+  const texto = $('#gen-estado-texto');
+  const lista = $('#gen-estado-lista');
+  const guia = $('#gen-estado-guia');
+  caja.classList.remove('est-ok', 'est-falta', 'est-error');
+  lista.replaceChildren();
+  lista.hidden = true;
+  guia.hidden = true;
+  let listo = false;
+  if (G.comprobando || !ia) {
+    texto.textContent = 'Comprobando ComfyUI…';
+  } else if (!ia.conectado) {
+    caja.classList.add('est-error');
+    texto.textContent = ia.mensaje || 'No encuentro ComfyUI abierto en este PC.';
+    guia.hidden = false;
+  } else if (!ia.listo) {
+    caja.classList.add('est-falta');
+    texto.textContent = 'ComfyUI está abierto, pero le falta algo para poder retocar:';
+    const nodos = Array.isArray(ia.faltan_nodos) ? ia.faltan_nodos : [];
+    const modelos = Array.isArray(ia.faltan_modelos) ? ia.faltan_modelos : [];
+    lista.replaceChildren(
+      ...nodos.map((n) => crear('li', { texto: 'Nodo que falta: ' + n })),
+      ...modelos.map((m) => crear('li', { texto: 'Modelo que falta: ' + m }))
+    );
+    lista.hidden = !lista.children.length;
+    guia.hidden = false;
+  } else {
+    caja.classList.add('est-ok');
+    const disp = Array.isArray(ia.dispositivos) ? ia.dispositivos.filter(Boolean) : [];
+    texto.textContent = 'Listo' + (disp.length ? ': ' + disp.join(', ') : '');
+    caja.title = ia.servidor ? 'Servidor: ' + ia.servidor : '';
+    listo = true;
+  }
+  $('#gen-comprobar').hidden = G.comprobando || !ia || listo;
+  $('#gen-generar').disabled = !(listo && G.fase === 'config');
+}
+
+async function generativoComprobar() {
+  if (!G.abierta || G.comprobando) return;
+  const f = S.porId.get(G.id);
+  const token = G.token;
+  const mio = ++G.tokenIA;
+  G.comprobando = true;
+  G.ia = null;
+  generativoPintarIA();
+  let ia;
+  try {
+    ia = await api('GET', '/api/generativo?preset=' + enc(f ? f.preset : 'generico'), undefined, { silencioso: true });
+  } catch (e) {
+    ia = { conectado: false, listo: false, mensaje: e.message || 'No se ha podido consultar el estado de la IA.' };
+  }
+  if (token !== G.token || mio !== G.tokenIA) return;
+  G.comprobando = false;
+  G.ia = ia;
+  generativoPintarIA();
+  // Si el foco sigue en el botón de cerrar (recién abierta), se deja listo en Generar.
+  if (ia.listo && G.fase === 'config' && document.activeElement === $('#gen-cerrar')) $('#gen-generar').focus();
+}
+
+async function abrirGenerativo() {
+  const f = fotoActual();
+  if (!f || G.abierta || O.abierta || $('dialog[open]')) return;
+  if (modeloBloquea()) {
+    avisar(TEXTO_ESPERA_MODELO);
+    return;
+  }
+  G.abierta = true;
+  G.id = f.id;
+  G.cancelando = false;
+  G.eligiendo = false;
+  G.indices = [];
+  G.comprobando = false;
+  const token = ++G.token;
+  G.vig++;
+  if (G.ultimaFoto !== f.id) $('#gen-instruccion').value = '';
+  G.ultimaFoto = f.id;
+  generativoError('');
+  generativoZona(G.zona);
+  G.ia = null;
+  generativoFase('config');
+  $('#capa-generativo').showModal();
+  $('#gen-cerrar').focus();
+  generativoComprobar();
+  // ¿Se está generando ya esta foto (por ejemplo, tras recargar la página)? Entonces se sigue esa.
+  try {
+    const e = await api('GET', `/api/fotos/${enc(f.id)}/generativo`, undefined, { silencioso: true });
+    if (token === G.token && e.activo && G.fase === 'config') generativoEmpezada(token);
+  } catch (e) { /* sin estado previo: se queda en los ajustes */ }
+}
+
+function generativoEmpezada(token) {
+  G.cancelando = false;
+  generativoFase('generando');
+  generativoProgreso({ hechas: 0, total: 0 });
+  $('#gen-cancelar').disabled = false;
+  $('#gen-cancelar').focus();
+  vigilarGenerativo(token);
+}
+
+async function generativoGenerar() {
+  if (!G.abierta || G.fase !== 'config' || !(G.ia && G.ia.listo)) return;
+  const token = G.token;
+  const cuerpo = { zona: G.zona };
+  const instruccion = $('#gen-instruccion').value.trim();
+  if (instruccion) cuerpo.instruccion = instruccion;
+  generativoError('');
+  $('#gen-generar').disabled = true; // un solo envío
+  try {
+    await api('POST', `/api/fotos/${enc(G.id)}/generativo`, cuerpo, { silencioso: true });
+  } catch (e) {
+    if (token !== G.token) return;
+    if (e.estado !== 409) { // 409: ya se estaba generando esta foto, y se sigue esa
+      generativoError(e.message);
+      generativoPintarIA();
+      return;
+    }
+  }
+  if (token !== G.token) return;
+  generativoEmpezada(token);
+}
+
+function generativoProgreso(e) {
+  const total = Number(e.total) || 0;
+  const hechas = Number(e.hechas) || 0;
+  const texto = G.cancelando
+    ? 'Cancelando…'
+    : total > 0 ? `Generando versión ${Math.min(hechas + 1, total)} de ${total}…` : 'Preparando la generación…';
+  const el = $('#gen-progreso-texto');
+  if (el.textContent !== texto) el.textContent = texto;
+  const pct = total > 0 ? Math.round((100 * hechas) / total) : 0;
+  $('#gen-relleno').style.width = Math.max(pct, 3) + '%';
+  $('#gen-progreso .barra').setAttribute('aria-valuenow', String(pct));
+}
+
+/** Consulta cada 2 s cómo va la generación y, al acabar, enseña las versiones (o el error). */
+async function vigilarGenerativo(token) {
+  const mio = ++G.vig;
+  const id = G.id;
+  let fallos = 0;
+  const vigente = () => token === G.token && mio === G.vig;
+  while (vigente()) {
+    let e;
+    try {
+      e = await api('GET', `/api/fotos/${enc(id)}/generativo`, undefined, { silencioso: true });
+      fallos = 0;
+    } catch (err) {
+      if (!vigente()) return;
+      if (++fallos >= 5) {
+        generativoFase('config');
+        generativoError('Se ha perdido la conexión con EDITFOTO.');
+        return;
+      }
+      await esperar(2000);
+      continue;
+    }
+    if (!vigente()) return;
+    if (!e.activo) {
+      await generativoTerminada(token, e);
+      return;
+    }
+    generativoProgreso(e);
+    await esperar(2000);
+  }
+}
+
+async function generativoTerminada(token, e) {
+  if (G.cancelando || e.error === 'Cancelado') {
+    G.cancelando = false;
+    generativoFase('config');
+    generativoError('');
+    return;
+  }
+  if (e.error) {
+    generativoFase('config');
+    generativoError(e.error);
+    return;
+  }
+  const indices = Array.isArray(e.opciones) ? e.opciones : [];
+  if (!indices.length) {
+    generativoFase('config');
+    generativoError('No se ha generado ninguna versión.');
+    return;
+  }
+  const texto = $('#gen-progreso-texto');
+  texto.textContent = 'Cargando las versiones…';
+  const id = G.id;
+  const sello = Date.now();
+  const imgs = [];
+  const cartas = indices.map((indice, i) => {
+    const img = crear('img', { alt: `Versión ${i + 1}`, draggable: 'false' });
+    imgs.push(ponerImagen(img, `/img/${enc(id)}/generada/${indice}?t=${sello}`));
+    return generadaTarjeta(indice, i, img);
+  });
+  const rejilla = $('#gen-rejilla');
+  rejilla.style.setProperty('--n', String(cartas.length));
+  rejilla.classList.remove('ocupado');
+  rejilla.replaceChildren(...cartas);
+  const cargadas = await Promise.all(imgs);
+  if (token !== G.token) return;
+  if (!cargadas.some(Boolean)) {
+    rejilla.replaceChildren();
+    generativoFase('config');
+    generativoError('No se han podido cargar las versiones. Vuelve a generar.');
+    return;
+  }
+  G.indices = indices;
+  G.eligiendo = false;
+  generativoFase('versiones');
+  const primera = $('.op-tarjeta', rejilla);
+  if (primera) primera.focus();
+}
+
+function generadaTarjeta(indice, i, img) {
+  return crear(
+    'button',
+    { type: 'button', class: 'op-tarjeta', 'data-indice': String(indice), onclick: () => elegirGenerada(i) },
+    crear('div', { class: 'op-imagen' }, img, crear('kbd', { class: 'op-num', texto: String(i + 1) })),
+    crear(
+      'div',
+      { class: 'op-datos' },
+      crear('strong', { class: 'op-nombre', texto: `Versión ${i + 1}` }),
+      crear('span', { class: 'op-parecido sin-nota', texto: 'Pulsa aquí o la tecla ' + (i + 1) })
+    )
+  );
+}
+
+async function cancelarGenerativo() {
+  if (!G.abierta || G.fase !== 'generando' || G.cancelando) return;
+  G.cancelando = true;
+  $('#gen-cancelar').disabled = true;
+  generativoProgreso({ hechas: 0, total: 0 });
+  try {
+    await api('POST', `/api/fotos/${enc(G.id)}/generativo/cancelar`, undefined, { silencioso: true });
+  } catch (e) {
+    G.cancelando = false;
+    $('#gen-cancelar').disabled = false;
+    generativoError(e.message);
+  }
+}
+
+/** Cierra la capa y la deja limpia. Si estaba generando, se cancela la generación. */
+function cerrarGenerativo() {
+  const dlg = $('#capa-generativo');
+  const id = G.id;
+  const generando = G.abierta && G.fase === 'generando';
+  G.abierta = false;
+  G.eligiendo = false;
+  G.cancelando = false;
+  G.token++;
+  G.vig++;
+  G.indices = [];
+  for (const img of $$('#gen-rejilla img')) soltarImagen(img);
+  $('#gen-rejilla').replaceChildren();
+  if (dlg.open) dlg.close();
+  if (generando && id) api('POST', `/api/fotos/${enc(id)}/generativo/cancelar`, undefined, { silencioso: true }).catch(() => {});
+}
+
+/** Esc o el botón de arriba: cancela si está generando; si no, cierra (en las versiones, descarta todas). */
+function generativoEscape() {
+  if (!G.abierta || G.eligiendo) return;
+  if (G.fase === 'generando') cancelarGenerativo();
+  else cerrarGenerativo();
+}
+
+async function elegirGenerada(n) {
+  if (!G.abierta || G.fase !== 'versiones' || G.eligiendo) return;
+  const indice = G.indices[n];
+  if (indice == null) return;
+  const id = G.id;
+  const token = G.token;
+  G.eligiendo = true;
+  generativoError('');
+  $('#gen-rejilla').classList.add('ocupado');
+  $('#gen-titulo').textContent = 'Aplicando la versión elegida…';
+  let f;
+  try {
+    f = await encolar(() => api('POST', `/api/fotos/${enc(id)}/generativo/elegir`, { indice }, { silencioso: true }), 'Aplicando el retoque...');
+  } catch (e) {
+    if (token === G.token) {
+      G.eligiendo = false;
+      $('#gen-rejilla').classList.remove('ocupado');
+      generativoFase('versiones');
+      generativoError(e.message);
+    }
+    return;
+  }
+  cerrarGenerativo();
+  await retoqueCambiado(f, 'Retoque aplicado. Se ha vuelto a recortar la prenda.');
+}
+
+async function quitarGenerativo() {
+  const f0 = S.porId.get(G.id);
+  if (!G.abierta || G.fase !== 'config' || !f0 || !f0.generada) return;
+  const ok = await confirmar(
+    'Se volverá a la foto original y se recortará otra vez la prenda. Se pierde el retoque generativo de esta foto.',
+    { titulo: 'Quitar retoque generativo', si: 'Quitar retoque', no: 'Cancelar' }
+  );
+  if (!ok || !G.abierta) return;
+  const id = G.id;
+  const token = G.token;
+  generativoError('');
+  $('#gen-quitar').disabled = true;
+  let f;
+  try {
+    f = await encolar(() => api('DELETE', `/api/fotos/${enc(id)}/generativo`, undefined, { silencioso: true }), 'Quitando el retoque...');
+  } catch (e) {
+    if (token === G.token) {
+      $('#gen-quitar').disabled = false;
+      generativoError(e.message);
+    }
+    return;
+  }
+  $('#gen-quitar').disabled = false;
+  cerrarGenerativo();
+  await retoqueCambiado(f, 'Retoque generativo quitado. Se ha vuelto a recortar la prenda.');
+}
+
+/** La foto ha cambiado en el servidor (se ha aplicado o quitado un retoque): se refresca todo lo que la muestra. */
+async function retoqueCambiado(foto, texto) {
+  SELLO_GEN.set(foto.id, Date.now());
+  const f = guardarFoto(foto);
+  avisar(texto, 'ok');
+  if (S.vista === 'detalle' && S.id === f.id) {
+    if (P.id === f.id && P.listo) { // la imagen de Pintar es la de trabajo: se recarga
+      const img = $('#pintor-img');
+      await ponerImagen(img, urlOriginal(f));
+      if (P.id === f.id && (img.naturalWidth !== P.W || img.naturalHeight !== P.H)) pintorLimpiar();
+    }
+    await actualizarVisor();
+  }
+}
+
+/** Teclas dentro de la capa: Esc cierra o cancela y, al ver las versiones, 1 a 9 eligen. */
+function generativoTecla(e) {
+  if ($('#dlg-confirmar').open) return;
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    generativoEscape();
+  } else if (G.fase === 'versiones' && /^[1-9]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault();
+    elegirGenerada(Number(e.key) - 1);
+  }
+}
+
 /* ---- Mis favoritas ---- */
 
 const FV = { subiendo: false, token: 0 };
@@ -2953,6 +3378,10 @@ document.addEventListener('keydown', (e) => {
     opcionesTecla(e);
     return;
   }
+  if (G.abierta) {
+    generativoTecla(e);
+    return;
+  }
   if (dialogoAbierto) return;
 
   if (e.key === 'Escape') {
@@ -3006,6 +3435,12 @@ document.addEventListener('keydown', (e) => {
       if (e.repeat || e.altKey) return;
       e.preventDefault();
       abrirOpciones();
+      break;
+    case 'g':
+    case 'G':
+      if (e.repeat || e.altKey) return;
+      e.preventDefault();
+      abrirGenerativo();
       break;
     case '1': ponerModo('resultado'); break;
     case '2': ponerModo('antes'); break;
@@ -3096,6 +3531,7 @@ function enlazarEventos() {
   $('#d-aprobar').addEventListener('click', aprobarActual);
   $('#d-megusta').addEventListener('click', meGusta);
   $('#d-opciones').addEventListener('click', abrirOpciones);
+  $('#d-generativo').addEventListener('click', abrirGenerativo);
   $$('.modo').forEach((b) => b.addEventListener('click', () => ponerModo(b.dataset.modo)));
   $('#sel-preset-foto').addEventListener('change', (e) => cambiarPresetFoto(e.target.value));
   $('#btn-restablecer').addEventListener('click', restablecer);
@@ -3110,6 +3546,24 @@ function enlazarEventos() {
   const dlgOp = $('#capa-opciones');
   dlgOp.addEventListener('cancel', (e) => { if (O.eligiendo) e.preventDefault(); });
   dlgOp.addEventListener('close', () => { if (O.abierta && !dlgOp.open) cerrarOpciones(); });
+  $$('#gen-zonas .btn').forEach((b) => b.addEventListener('click', () => generativoZona(b.dataset.zona)));
+  $('#gen-generar').addEventListener('click', generativoGenerar);
+  $('#gen-cancelar').addEventListener('click', cancelarGenerativo);
+  $('#gen-cerrar').addEventListener('click', generativoEscape);
+  $('#gen-comprobar').addEventListener('click', generativoComprobar);
+  $('#gen-quitar').addEventListener('click', quitarGenerativo);
+  $('#gen-instruccion').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      generativoGenerar();
+    }
+  });
+  const dlgGen = $('#capa-generativo');
+  dlgGen.addEventListener('cancel', (e) => { // Esc con el foco en el campo de texto
+    e.preventDefault();
+    generativoEscape();
+  });
+  dlgGen.addEventListener('close', () => { if (G.abierta && !dlgGen.open) cerrarGenerativo(); });
   enlazarFavoritas();
 
   $('#d-girar-izq').append(iconoGiro(-1));
