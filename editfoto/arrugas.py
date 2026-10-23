@@ -17,6 +17,8 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
+UMBRAL_ARRUGA = 0.05  # diferencia de luz (0 a 1) a partir de la cual una sombra deja de ser arruga
+
 
 def suavizar(img: np.ndarray, alfa: np.ndarray, fuerza: float, escala: float = 0.10,
              respeto_bordes: float = 0.5, proteger: np.ndarray | None = None) -> np.ndarray:
@@ -53,6 +55,10 @@ def suavizar(img: np.ndarray, alfa: np.ndarray, fuerza: float, escala: float = 0
     bajo = suavizado(s_fino)     # sin textura fina
     plano = suavizado(s_medio)   # sin arrugas
     sombras = np.clip(bajo - plano, -0.25, 0.25)
+    # Una arruga es una sombra suave. Las fuertes (el satinado del nylon, un pliegue hondo, el
+    # interior de una manga) son el material y la forma de la prenda: si se quitaran, los
+    # negros se aclararian y la prenda saldria gris y plana. Se respetan cada vez mas.
+    sombras = sombras / (1 + (np.abs(sombras) / UMBRAL_ARRUGA) ** 4)
 
     peso = cv2.GaussianBlur(cv2.erode(prenda, np.ones((3, 3), np.uint8)), (0, 0), 2.0)
     if proteger is not None:
