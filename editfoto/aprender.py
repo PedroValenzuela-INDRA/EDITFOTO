@@ -150,6 +150,15 @@ def _huellas(ejemplos: list[Ejemplo]) -> list:
     return [np.round(h, 4).tolist() for h in hs if h is not None]
 
 
+def _estilo(ejemplos: list[Ejemplo]) -> list:
+    try:
+        hs = [orientacion.huella_foto(e.img) for e in ejemplos[:40]]
+    except Exception as e:  # sin el modelo se sigue aprendiendo todo lo demas
+        print(f"Aviso: no se ha podido aprender tu estilo: {modelos.texto_error(e)}", flush=True)
+        return []
+    return [np.round(h, 4).tolist() for h in hs]
+
+
 def _preset_de(ejemplos: list[Ejemplo], nombre: str, base: str, descripcion: str, fondo: dict) -> tuple[dict, list[str]]:
     def med(clave):
         return float(np.median([e.medida[clave] for e in ejemplos]))
@@ -176,6 +185,9 @@ def _preset_de(ejemplos: list[Ejemplo], nombre: str, base: str, descripcion: str
     huellas = _huellas(ejemplos)
     if huellas:  # como es una prenda derecha de este tipo, para girar solas las fotos nuevas
         cambios["orientacion"] = {"huellas": huellas}
+    estilo = _estilo(ejemplos)
+    if estilo:  # como son tus fotos favoritas enteras, para puntuar opciones por parecido
+        cambios["estilo"] = {"huellas": estilo}
     preset = config.fusionar(config.cargar_preset(base), cambios)
     config.guardar_preset(preset)
     texto = [

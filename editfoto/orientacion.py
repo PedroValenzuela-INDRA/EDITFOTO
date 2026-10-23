@@ -53,6 +53,25 @@ def huella(img: np.ndarray, alfa: np.ndarray) -> np.ndarray | None:
     return None if c is None else _huellas_de([c])[0]
 
 
+def huella_foto(img: np.ndarray, fondo: float = 0.5) -> np.ndarray:
+    """Resumen de una foto entera (prenda, fondo, encuadre, luz): sirve para medir cuanto se
+    parece una foto editada a tus favoritas."""
+    h, w = img.shape[:2]
+    lado = max(h, w)
+    cuadro = np.full((lado, lado, 3), fondo, np.float32)
+    cuadro[(lado - h) // 2:(lado - h) // 2 + h, (lado - w) // 2:(lado - w) // 2 + w] = img
+    return _huellas_de([cv2.resize(cuadro, (LADO, LADO), interpolation=cv2.INTER_AREA)])[0]
+
+
+def parecido(huella_: np.ndarray, favoritas) -> float | None:
+    """Parecido (0 a 1, mas es mejor) con las favoritas mas cercanas."""
+    if favoritas is None or len(favoritas) == 0:
+        return None
+    refs = np.asarray(favoritas, np.float32).reshape(-1, huella_.shape[0])
+    s = np.sort(refs @ huella_)[-min(3, len(refs)):].mean()
+    return float(np.clip(s, 0, 1))
+
+
 def referencias_genericas() -> np.ndarray:
     return np.load(_GENERICAS).astype(np.float32) if _GENERICAS.exists() else np.zeros((0, 384), np.float32)
 

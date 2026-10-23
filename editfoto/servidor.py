@@ -14,11 +14,13 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 
+import cv2
+import numpy as np
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, actualizador, config, modelos
+from . import __version__, actualizador, autoaprendizaje, config, imagen, modelos
 from .proyecto import TIPOS_PINCEL, Proyecto
 
 WEB = Path(__file__).resolve().parent / "web"
@@ -144,6 +146,94 @@ def crear_app(proyecto: Proyecto) -> FastAPI:
             return {"preset": preset_nuevo, "presets": [preset_nuevo], "resumen": resumen}
         presets, resumen = aprender_por_tipo(carpeta)  # un preset por subcarpeta
         return {"preset": presets[0], "presets": presets, "resumen": resumen}
+
+    # ---------- autoaprendizaje: favoritas y opciones ----------
+
+    app.state.aprendizaje = {"activo": False, "mensaje": "", "error": None, "presets": []}
+
+    def reaprender_en_segundo_plano():
+        estado = app.state.aprendizaje
+        if estado["activo"]:
+            return False
+
+        def correr():
+            from .aprender import aprender_por_tipo
+
+            estado.update(activo=True, mensaje="Aprendiendo de tus favoritas...", error=None)
+            try:
+                presets_nuevos, resumen = aprender_por_tipo(autoaprendizaje.carpeta_ejemplos(),
+                                                            avisar=lambda t: estado.update(mensaje=str(t).strip()))
+                estado.update(mensaje=" ".join(resumen["texto"][-1:]), presets=resumen["presets"])
+            except Exception as e:  # noqa: BLE001 - se ensena en la interfaz
+                estado["error"] = modelos.texto_error(e)
+            finally:
+                estado["activo"] = False
+
+        threading.Thread(target=correr, daemon=True).start()
+        return True
+
+    @app.get("/api/aprendizaje")
+    def estado_aprendizaje():
+        return app.state.aprendizaje
+
+    @app.post("/api/reaprender")
+    def reaprender():
+        return {"empezado": reaprender_en_segundo_plano()}
+
+    @app.post("/api/fotos/{id_}/favorita")
+    def favorita(id_: str):
+        buscar(id_)
+        ruta = autoaprendizaje.guardar_favorita(proyecto, id_)
+        return {"ruta": str(ruta), "aprendiendo": reaprender_en_segundo_plano() or app.state.aprendizaje["activo"]}
+
+    @app.get("/api/ejemplos")
+    def ejemplos():
+        return {"carpeta": str(autoaprendizaje.carpeta_ejemplos()), "presets": autoaprendizaje.listar_ejemplos()}
+
+    @app.put("/api/ejemplos/{preset}/{nombre}")
+    async def subir_ejemplo(preset: str, nombre: str, request: Request):
+        ruta = autoaprendizaje.guardar_ejemplo(preset, nombre, await request.body())
+        return {"ruta": str(ruta), "nombre": ruta.name, "preset": ruta.parent.name}
+
+    @app.delete("/api/ejemplos/{preset}/{nombre}")
+    def borrar_ejemplo(preset: str, nombre: str):
+        autoaprendizaje.borrar_ejemplo(preset, nombre)
+        return {"ok": True}
+
+    @app.get("/img/ejemplo/{preset}/{nombre}")
+    def img_ejemplo(preset: str, nombre: str, max: int = 480):
+        ruta = autoaprendizaje.ruta_ejemplo(preset, nombre)
+        if not ruta.exists():
+            raise HTTPException(404, "No existe")
+        img = imagen.reducir(imagen.cargar(ruta), int(np.clip(max, 64, 2400)))
+        ok, datos = cv2.imencode(".jpg", cv2.cvtColor(imagen.a_uint8(img), cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 85])
+        return Response(datos.tobytes(), media_type="image/jpeg")
+
+    @app.post("/api/fotos/{id_}/opciones")
+    def opciones(id_: str):
+        buscar(id_)
+        return autoaprendizaje.opciones(proyecto, id_)
+
+    @app.post("/api/fotos/{id_}/elegir")
+    def elegir(id_: str, datos: dict = Body(...)):
+        buscar(id_)
+        autoaprendizaje.elegir(proyecto, id_, int(datos.get("indice", -1)))
+        return foto_json(id_)
+
+    @app.get("/img/{id_}/opcion/{indice}")
+    def img_opcion(id_: str, indice: int):
+        buscar(id_)
+        ruta = proyecto._dir(id_) / f"opcion_{int(indice)}.jpg"
+        if not ruta.exists():
+            raise HTTPException(404, "No hay opciones preparadas")
+        return FileResponse(ruta, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/presets/{nombre}/aprendizaje")
+    def aprendizaje_preset(nombre: str):
+        p = config.cargar_preset(nombre)
+        return {"elecciones": (p.get("aprendizaje") or {}).get("elecciones", 0),
+                "resumen": autoaprendizaje.resumen(p),
+                "favoritas": len(autoaprendizaje.listar_ejemplos().get(nombre, []))}
 
     # ---------- fotos ----------
 

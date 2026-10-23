@@ -98,3 +98,20 @@ Las respuestas son JSON salvo las rutas `/img/...`. Errores: codigo HTTP 4xx/5xx
 - Preset `orientacion = {auto, huellas}`: con `auto` (por defecto true) la app pone la prenda derecha sola al analizar cada foto nueva. `huellas` son los resumenes DINOv2 (384 numeros) de tus ejemplos, los rellena `aprender`; sin ellas se usa la coleccion generica que viene con la app.
 - Objeto Foto: `giro_auto` = cuartos de vuelta horarios que la app aplico sola (0 si no giro nada, null si aun no se ha analizado). El giro queda sumado en `ajustes.giro90`, asi que el giro manual (`/girar`) y "Restablecer" funcionan igual. La app decide una sola vez por foto: si la giras a mano, no vuelve a girarla.
 - `GET /api/modelos`: la lista de modelos incluye `dinov2` (85 MB).
+
+## Autoaprendizaje (v0.4.0)
+
+Banco de favoritas: fotos que te gustan en `Documentos\EDITFOTO\fotos\ejemplos\<preset>\`. La app aprende de todas (fondo, encuadre, forma, orientacion y estilo).
+
+- `POST /api/fotos/{id}/favorita` -> copia la foto editada a `ejemplos/<preset>/fav_<id>.jpg` y empieza a reaprender en segundo plano -> `{ruta, aprendiendo}`. 400 si la foto aun no esta editada.
+- `PUT /api/ejemplos/{preset}/{nombre}` cuerpo: la foto en bruto (JPG, PNG o WEBP) -> la guarda en el banco -> `{ruta, nombre, preset}`. 400 si no es una foto. Despues de subir varias, llama a `POST /api/reaprender`.
+- `GET /api/ejemplos` -> `{carpeta, presets: {preset: [nombres]}}`; `GET /img/ejemplo/{preset}/{nombre}?max=480` -> JPEG; `DELETE /api/ejemplos/{preset}/{nombre}`.
+- `POST /api/reaprender` -> `{empezado}`; `GET /api/aprendizaje` -> `{activo, mensaje, error, presets}` (consultalo cada segundo mientras `activo`).
+
+Opciones para elegir:
+
+- `POST /api/fotos/{id}/opciones` -> prepara 4 versiones (tarda como 4 renders) -> `{opciones: [{indice, nombre, valores: {forma?, arrugas, escala, contraste}, parecido}], recomendada, con_favoritas}`. `parecido` (0 a 1, o null sin favoritas) es lo que se parece a tus favoritas; `recomendada` es la que mas.
+- `GET /img/{id}/opcion/{indice}` -> JPEG de esa version.
+- `POST /api/fotos/{id}/elegir` body `{indice}` -> aplica esa version a la foto (queda en sus ajustes) y mueve un 30 % los ajustes del preset hacia ella -> Foto. 400 si no hay opciones preparadas.
+- `GET /api/presets/{nombre}/aprendizaje` -> `{elecciones, resumen: [frases], favoritas}`.
+- Objeto Foto: `opciones` (las preparadas, o []).

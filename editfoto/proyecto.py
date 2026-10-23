@@ -48,6 +48,7 @@ class Foto:
     ancho: int = 0
     alto: int = 0
     giro_auto: int | None = None  # cuartos de vuelta que la app giro sola al analizar (None = aun no)
+    opciones: list = field(default_factory=list)  # versiones preparadas para elegir (autoaprendizaje)
 
 
 def _id_de(ruta_rel: Path) -> str:
