@@ -183,12 +183,19 @@ def sesion(nombre: str):
             # DirectML no admite ejecucion en paralelo ni reordenar memoria.
             opciones.enable_mem_pattern = False
             opciones.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+        if proveedores == ["CPUExecutionProvider"]:
+            # Sin la reserva de memoria de ONNX, BiRefNet en la CPU pasa de 12 GB a menos de 7 GB
+            # de pico, igual de rapido: un PC de 16 GB no se queda sin memoria.
+            opciones.enable_cpu_mem_arena = False
+            opciones.enable_mem_pattern = False
         try:
             s = ort.InferenceSession(str(ruta_modelo(nombre)), opciones, providers=proveedores)
         except Exception as e:  # GPU mal configurada: seguimos en CPU en vez de fallar.
             print(f"Aviso: no se pudo preparar la tarjeta grafica para {nombre}. Se usa la CPU.\n"
                   f"  Motivo: {texto_error(e)}", flush=True)
             _solo_cpu.add(nombre)
+            opciones.enable_cpu_mem_arena = False
+            opciones.enable_mem_pattern = False
             s = ort.InferenceSession(str(ruta_modelo(nombre)), opciones, providers=["CPUExecutionProvider"])
         _sesiones[nombre] = s
         return s
