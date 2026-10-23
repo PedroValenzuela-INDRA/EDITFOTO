@@ -160,93 +160,175 @@ def _suelo_liso(img: np.ndarray, valido: np.ndarray) -> np.ndarray:
     return valido & (distancia < umbral)
 
 
-def rellenar_textura(img: np.ndarray, hueco: np.ndarray, semilla: int = 0) -> np.ndarray:
+def _luz(img: np.ndarray, valido: np.ndarray) -> np.ndarray:
+    """Luz del suelo (variaciones suaves) a partir de los pixeles validos.
+
+    Es una superficie de grado 2 ajustada al suelo visible, que extrapola bien debajo de un
+    hueco que ocupa media foto, mas una correccion local cerca del suelo visible."""
+    h, w = valido.shape
+    e = 128 / max(h, w)
+    peq = (max(8, round(w * e)), max(8, round(h * e)))
+    img_p = cv2.resize(img, peq, interpolation=cv2.INTER_AREA)
+    v_p = cv2.resize(valido.astype(np.float32), peq, interpolation=cv2.INTER_AREA) > 0.99
+    if v_p.sum() < 12:
+        v_p = cv2.resize(valido.astype(np.float32), peq, interpolation=cv2.INTER_AREA) > 0.5
+    if v_p.sum() < 6:
+        media = img[valido].mean(0) if valido.any() else img.reshape(-1, 3).mean(0)
+        return np.broadcast_to(media.astype(np.float32), img.shape).copy()
+    yy, xx = np.mgrid[0:peq[1], 0:peq[0]].astype(np.float32)
+    xx, yy = xx / peq[0] - 0.5, yy / peq[1] - 0.5
+    A = np.stack([np.ones_like(xx), xx, yy, xx * xx, xx * yy, yy * yy], -1)
+    Av = A[v_p]
+    # Un poco de freno en los terminos curvos: si solo se ve una franja de suelo, no se dispara.
+    freno = np.diag([0, 0, 0, 1, 1, 1]).astype(np.float32) * 0.05 * len(Av)
+    coef = np.linalg.solve(Av.T @ Av + freno, Av.T @ img_p[v_p])
+    poli = A @ coef
+    sigma = 0.06 * max(peq)
+    peso = cv2.GaussianBlur(v_p.astype(np.float32), (0, 0), sigma)
+    corr = cv2.GaussianBlur((img_p - poli) * v_p[..., None], (0, 0), sigma) / np.maximum(peso, 1e-4)[..., None]
+    corr *= np.clip(peso / 0.3, 0, 1)[..., None]  # lejos del suelo visible, solo la superficie
+    luz = poli + corr
+    bajo, alto = np.percentile(img_p[v_p], 1, axis=0), np.percentile(img_p[v_p], 99, axis=0)
+    luz = np.clip(luz, bajo - 0.03, alto + 0.03)
+    return cv2.resize(luz.astype(np.float32), (w, h), interpolation=cv2.INTER_CUBIC)
+
+
+def _igualar_histograma(x: np.ndarray, muestra: np.ndarray) -> np.ndarray:
+    orden = np.argsort(x.ravel())
+    salida = np.empty(x.size, np.float32)
+    salida[orden] = np.interp(np.linspace(0, 1, x.size), np.linspace(0, 1, muestra.size), np.sort(muestra))
+    return salida.reshape(x.shape)
+
+
+def _grano(residuo: np.ndarray, region: np.ndarray, T: int, rng, piezas: int = 8) -> np.ndarray | None:
+    """Grano nuevo con las mismas estadisticas que el del suelo (spot noise, Galerne et al. 2011).
+
+    Se toman trozos de suelo de muestra y se convoluciona ruido aleatorio con ellos: sale
+    una textura con la misma "trama" y el mismo color, sin costuras ni trozos repetidos.
+    Va muy bien con moquetas, fieltros, telas y cemento."""
+    h, w, _ = residuo.shape
+    while True:  # el trozo de muestra mas grande que quepa entero en el suelo visible
+        ok = cv2.erode(region.astype(np.uint8), np.ones((T, T), np.uint8), anchor=(0, 0)) > 0
+        ok[h - T + 1:, :] = False
+        ok[:, w - T + 1:] = False
+        ys, xs = np.nonzero(ok)
+        if len(ys) >= 20 or T <= 16:
+            break
+        T = max(16, int(T * 0.8) // 2 * 2)
+    if len(ys) == 0:
+        return None
+    ventana = np.outer(np.hanning(T), np.hanning(T)).astype(np.float32)
+    ventana /= np.sqrt((ventana ** 2).sum())
+    H, W = h + T, w + T
+    suma = np.zeros((H, W, 3), np.float32)
+    for _ in range(piezas):
+        j = rng.integers(len(ys))
+        trozo = residuo[ys[j]:ys[j] + T, xs[j]:xs[j] + T]
+        nucleo = (trozo - trozo.mean((0, 1))) * ventana[..., None]
+        ruido = np.fft.rfft2(rng.standard_normal((H, W)).astype(np.float32))  # mismo ruido en los 3 canales
+        for c in range(3):
+            k = np.zeros((H, W), np.float32)
+            k[:T, :T] = nucleo[..., c]
+            suma[..., c] += np.fft.irfft2(ruido * np.fft.rfft2(k), s=(H, W))
+    grano = suma[T:T + h, T:T + w] / np.sqrt(piezas)  # sin el borde circular
+    muestra = residuo[region]
+    if len(muestra) > 300000:
+        muestra = muestra[rng.integers(len(muestra), size=300000)]
+    for c in range(3):  # mismo reparto de claros y oscuros que el suelo real
+        grano[..., c] = _igualar_histograma(grano[..., c], muestra[:, c])
+    return grano
+
+
+def rellenar_textura(img: np.ndarray, hueco: np.ndarray, semilla: int = 0,
+                     decoracion: np.ndarray | None = None) -> np.ndarray:
     """Rellena un hueco grande de un fondo con textura (moqueta, fieltro, tela, madera...).
 
     LaMa va muy bien para huecos pequenos, pero en uno que ocupa media foto deja manchas.
-    Aqui se separan dos capas: la luz (variaciones suaves), que se interpola desde el fondo
-    visible, y la textura, que se rellena con trozos copiados del propio suelo y mezclados
-    con bordes suaves. Solo se copia de zonas que son suelo de verdad, asi una decoracion
-    (otra prenda) o una sombra no se repiten por el hueco."""
+    Aqui se separan dos capas: la luz (variaciones suaves), que se ajusta al suelo visible,
+    y el grano, que se sintetiza con las estadisticas del propio suelo. Solo se mira el suelo
+    de verdad, asi una decoracion (otra prenda) o una sombra no se repiten por el hueco."""
     h, w = hueco.shape
     rng = np.random.default_rng(semilla)
     suelo = _suelo_liso(img, ~hueco)
+    if decoracion is not None:
+        suelo &= ~decoracion
     if suelo.sum() < 0.02 * h * w:
         suelo = ~hueco
-
-    # 1. Luz: interpolacion suave del suelo visible, hecha a baja resolucion.
-    e = 128 / max(h, w)
-    peq = (max(4, round(w * e)), max(4, round(h * e)))
-    img_p = cv2.resize(img, peq, interpolation=cv2.INTER_AREA)
-    suelo_p = cv2.resize(suelo.astype(np.float32), peq, interpolation=cv2.INTER_AREA)
-    sigma = 0.06 * max(peq)
-    peso = cv2.GaussianBlur(suelo_p, (0, 0), sigma)
-    luz_p = cv2.GaussianBlur(img_p * suelo_p[..., None], (0, 0), sigma) / np.maximum(peso, 1e-4)[..., None]
-    for _ in range(6):  # donde el hueco es muy ancho, se extiende con un desenfoque mas amplio
-        lejos = peso < 0.05
-        if not lejos.any():
-            break
-        sigma *= 2
-        peso2 = cv2.GaussianBlur(suelo_p, (0, 0), sigma)
-        luz2 = cv2.GaussianBlur(img_p * suelo_p[..., None], (0, 0), sigma) / np.maximum(peso2, 1e-6)[..., None]
-        luz_p[lejos] = luz2[lejos]
-        peso = np.maximum(peso, peso2)
-    luz = cv2.resize(luz_p, (w, h), interpolation=cv2.INTER_CUBIC)
-
-    # 2. Textura: residuo (foto - luz) copiado a trozos desde el suelo liso.
+    luz = _luz(img, suelo)
+    T = int(np.clip(0.12 * min(h, w), 32, 192)) // 2 * 2
+    region = (cv2.GaussianBlur(suelo.astype(np.float32), (0, 0), 3) > 0.6) & ~hueco
+    # Solo el grano, sin restos de luz. El desenfoque mira solo el suelo: si mezclara la prenda
+    # o la decoracion, el grano de alrededor saldria aclarado u oscurecido.
     residuo = img - luz
-    P = int(np.clip(0.08 * min(h, w), 24, 160)) // 2 * 2
-    paso = P // 2
-    origen = cv2.erode(suelo.astype(np.uint8), np.ones((P, P), np.uint8), anchor=(0, 0)) > 0  # esquina sup-izq
-    origen[h - P:, :] = False
-    origen[:, w - P:] = False
-    ys, xs = np.nonzero(origen)
-    if len(ys) == 0:
-        return img
-    ventana = np.outer(np.hanning(P + 2)[1:-1], np.hanning(P + 2)[1:-1]).astype(np.float32) + 1e-3
-    acumulado = np.zeros_like(img)
-    pesos = np.zeros((h, w), np.float32)
-    hy, hx = np.nonzero(cv2.dilate(hueco.astype(np.uint8), np.ones((P, P), np.uint8)))
-    for y in range(max(0, hy.min() - paso), min(h - 1, hy.max()) + 1, paso):
-        for x in range(max(0, hx.min() - paso), min(w - 1, hx.max()) + 1, paso):
-            k = rng.integers(len(ys))
-            sy, sx = ys[k], xs[k]
-            alto, ancho = min(P, h - y), min(P, w - x)
-            v = ventana[:alto, :ancho]
-            acumulado[y:y + alto, x:x + ancho] += residuo[sy:sy + alto, sx:sx + ancho] * v[..., None]
-            pesos[y:y + alto, x:x + ancho] += v
-    textura = acumulado / np.maximum(pesos, 1e-6)[..., None]
-    # Mezclar trozos con pesos suaves reduce el contraste: se devuelve al del suelo original.
-    std_suelo = residuo[suelo].std(axis=0)
-    zona = pesos > 1e-3
-    std_relleno = textura[zona].std(axis=0) if zona.any() else std_suelo
-    textura *= np.clip(std_suelo / np.maximum(std_relleno, 1e-4), 1.0, 2.0)
-
-    relleno = np.clip(luz + textura, 0, 1)
-    borde = cv2.GaussianBlur(hueco.astype(np.float32), (0, 0), max(2.0, P / 8))[..., None]
+    m = region.astype(np.float32)
+    suave = cv2.GaussianBlur(residuo * m[..., None], (0, 0), T / 2) / \
+        np.maximum(cv2.GaussianBlur(m, (0, 0), T / 2), 1e-4)[..., None]
+    residuo = residuo - suave
+    grano = _grano(residuo, region, T, rng) if region.any() else None
+    relleno = np.clip(luz + (grano if grano is not None else 0), 0, 1)
+    borde = cv2.GaussianBlur(hueco.astype(np.float32), (0, 0), max(2.0, T / 16))[..., None]
     borde = np.maximum(borde, hueco[..., None].astype(np.float32))
     return (img * (1 - borde) + relleno * borde).astype(np.float32)
 
 
+def _hueco_de_un_ejemplo(img: np.ndarray, prenda: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Lo que hay que borrar de un ejemplo: la prenda, su sombra y los restos de su borde,
+    sin tocar la decoracion (p. ej. el pantalon de abajo). Devuelve (hueco, decoracion)."""
+    h, w = prenda.shape
+    tam = float(np.sqrt(max(prenda.sum(), 1)))
+    elipse = lambda k: cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))  # noqa: E731
+    zona = cv2.dilate(prenda.astype(np.uint8), elipse(max(5, int(0.07 * tam)) | 1)) > 0
+    decoracion = np.zeros_like(prenda)
+    fuera = ~zona
+    if fuera.sum() < 0.02 * h * w:
+        return zona, decoracion
+    lab = cv2.cvtColor(img.astype(np.float32), cv2.COLOR_RGB2Lab)
+    tipico = np.median(lab[fuera], axis=0)
+    croma = np.linalg.norm(lab[..., 1:] - tipico[1:], axis=2)
+    parece_suelo = (croma < max(4.0, 3 * float(np.median(croma[fuera])))) & \
+                   (lab[..., 0] < float(np.percentile(lab[..., 0][fuera], 95)) + 5)
+    # Lo que no parece suelo y sale bastante fuera de la zona es decoracion: se respeta.
+    # Lo que no parece suelo pero queda dentro son restos de la prenda: se borran.
+    n, etiquetas, stats, _ = cv2.connectedComponentsWithStats((~parece_suelo).astype(np.uint8), connectivity=8)
+    dentro = np.bincount(etiquetas[zona], minlength=n)
+    de_decoracion = np.nonzero(dentro < 0.6 * stats[:, cv2.CC_STAT_AREA])[0]
+    decoracion = np.isin(etiquetas, de_decoracion[de_decoracion > 0]) & ~prenda
+    hueco = (zona & ~decoracion) | prenda
+
+    # La sombra de la prenda llega mas lejos que la zona: suelo mas oscuro de lo que
+    # tocaria por la luz, pegado al hueco. Si se dejara, se veria el contorno de la prenda vieja.
+    zona2 = cv2.dilate(prenda.astype(np.uint8), elipse(max(7, int(0.2 * tam)) | 1)) > 0
+    suelo0 = _suelo_liso(img, ~zona2) & ~decoracion
+    if suelo0.sum() > 0.01 * h * w:
+        luz = cv2.cvtColor(_luz(img, suelo0), cv2.COLOR_RGB2Lab)[..., 0]
+        diferencia = cv2.GaussianBlur(lab[..., 0], (0, 0), 2.0) - luz
+        ruido = float(np.std(diferencia[suelo0]))
+        sombra = zona2 & parece_suelo & ~decoracion & (diferencia < -max(2.0, 1.5 * ruido))
+        _, et = cv2.connectedComponents((sombra | hueco).astype(np.uint8))
+        pegadas = np.unique(et[hueco])
+        hueco |= np.isin(et, pegadas[pegadas > 0]) & sombra
+        hueco = cv2.morphologyEx(hueco.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8)) > 0
+        hueco = (hueco & ~decoracion) | prenda
+    return hueco, decoracion
+
+
 def placa_de_un_ejemplo(img: np.ndarray, prenda: np.ndarray) -> tuple[np.ndarray, dict]:
-    """Fondo a partir de una sola foto: se borra la prenda principal y se rellena con LaMa.
+    """Fondo a partir de una sola foto: se borra la prenda principal (con su sombra) y se rellena.
 
     Lo demas se queda tal cual, incluidas las decoraciones (otra prenda de atrezo, una
     planta...), asi la foto nueva sale con la misma composicion."""
-    tam = float(np.sqrt(max(prenda.sum(), 1)))
-    k = max(5, int(0.07 * tam)) | 1  # la prenda y su sombra
-    hueco = cv2.dilate(prenda.astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))) > 0
-    placa, relleno = rellenar_hueco(img, hueco)
+    hueco, decoracion = _hueco_de_un_ejemplo(img, prenda)
+    placa, relleno = rellenar_hueco(img, hueco, decoracion)
     return np.clip(placa, 0, 1).astype(np.float32), {"fotos_usadas": 1, "alineadas": 0,
                                                        "hueco_rellenado": round(float(hueco.mean()), 4),
                                                        "relleno": relleno}
 
 
-def rellenar_hueco(img: np.ndarray, hueco: np.ndarray) -> tuple[np.ndarray, str]:
+def rellenar_hueco(img: np.ndarray, hueco: np.ndarray, decoracion: np.ndarray | None = None) -> tuple[np.ndarray, str]:
     """Huecos pequenos con LaMa (si esta); los grandes, con relleno de textura."""
     if hueco.mean() < 0.03 and modelos._ruta_destino("lama").exists():
         return inpaint.borrar(img, hueco.astype(np.float32)), "LaMa"
-    return rellenar_textura(img, hueco), "textura"
+    return rellenar_textura(img, hueco, decoracion=decoracion), "textura"
 
 
 def guardar(placa: np.ndarray, nombre: str) -> str:
