@@ -110,7 +110,7 @@ def test_mientras_baja_el_modelo_grande_se_usa_el_lite(tmp_path, monkeypatch):
     completo.parent.mkdir(parents=True)
     completo.write_bytes(b"x")
     assert modelos.modelo_segmentacion() == "birefnet"
-    assert modelos.estado_modelos()["faltan"] == ["birefnet_lite", "lama"]
+    assert modelos.estado_modelos()["faltan"] == ["birefnet_lite", "dinov2", "lama"]
 
 
 def test_notas_de_version_salen_del_changelog():

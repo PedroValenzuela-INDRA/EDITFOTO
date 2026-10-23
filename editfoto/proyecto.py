@@ -25,7 +25,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
-from . import color, config, imagen, modelos, pipeline
+from . import color, config, imagen, mascara, modelos, orientacion, pipeline
 
 TIPOS_PINCEL = ("borrar", "proteger", "sumar", "restar")
 
@@ -47,6 +47,7 @@ class Foto:
     info: dict = field(default_factory=dict)
     ancho: int = 0
     alto: int = 0
+    giro_auto: int | None = None  # cuartos de vuelta que la app giro sola al analizar (None = aun no)
 
 
 def _id_de(ruta_rel: Path) -> str:
@@ -179,12 +180,37 @@ class Proyecto:
             preset = self.preset_de(f)
             img = self._imagen(f, preset)
             alfa, medida = pipeline.analizar(img, preset)
+            if f.giro_auto is None:
+                k = self._orientar(f, img, alfa, preset)
+                if k:
+                    alfa = np.ascontiguousarray(np.rot90(alfa, -k))
+                    f.ajustes["giro90"] = (self.giro(f) + k) % 4
+                    img = self._imagen(f, preset)
             imagen.guardar_png_gris(alfa, self._dir(id_) / "alfa.png")
             imagen.miniatura(img, self._dir(id_) / "mini_original.jpg")
             f.medida_fondo, f.analizada = medida, True
             f.alto, f.ancho = img.shape[:2]
             self._guardar_estado(f)
             return f
+
+    def _orientar(self, f: Foto, img: np.ndarray, alfa: np.ndarray, preset: dict) -> int:
+        """Cuartos de vuelta para poner la prenda derecha. Se decide una sola vez por foto:
+        si luego la giras a mano, manda tu giro."""
+        f.giro_auto = 0
+        o = preset.get("orientacion") or {}
+        if not o.get("auto", True) or any(self._dir(f.id).glob("pincel_*.png")):
+            return 0
+        try:
+            m = preset["mascara"]
+            limpia, _ = mascara.limpiar(alfa, m["min_componente"], m["max_hueco"], m["quitar_cables"])
+            k, margen = orientacion.giro_probable(img, limpia, o.get("huellas"))
+        except Exception as e:  # sin el modelo, la foto se queda como venga
+            print(f"Aviso: no se ha podido decidir hacia donde va la prenda: {modelos.texto_error(e)}", flush=True)
+            return 0
+        if k and margen >= orientacion.MARGEN_MINIMO:
+            f.giro_auto = k
+            return k
+        return 0
 
     def renderizar(self, id_: str) -> Foto:
         with self.cerrojo:

@@ -266,3 +266,72 @@ def test_adaptar_forma_no_se_aplica_si_no_procede():
     dos[100:300, 50:250] = 1
     dos[100:300, 350:550] = 1
     assert "varias piezas" in forma.adaptar(np.zeros((600, 600, 3), np.float32), dos, ejemplo, 1.0)[2]["forma"]
+
+
+def _prenda_en_t(alto=600, ancho=600) -> np.ndarray:
+    """Silueta de camiseta derecha: mangas arriba, cuerpo abajo."""
+    m = np.zeros((alto, ancho), np.float32)
+    m[100:220, 80:520] = 1  # hombros y mangas
+    m[220:520, 200:400] = 1  # cuerpo
+    return m
+
+
+@pytest.fixture
+def orientacion_simulada(monkeypatch):
+    """DINOv2 simulado: la "huella" es la silueta reducida, asi solo se parece a una camiseta
+    derecha la que esta derecha."""
+    from conftest import GIRO_PROBABLE, HUELLA
+    from editfoto import orientacion
+
+    def huellas_falsas(cuadros):
+        hs = []
+        for c in cuadros:
+            v = cv2.resize((c.mean(axis=2) < 0.45).astype(np.float32), (16, 24), interpolation=cv2.INTER_AREA)
+            v = np.resize(v.ravel(), 384)
+            hs.append(v / max(np.linalg.norm(v), 1e-6))
+        return np.array(hs, np.float32)
+
+    monkeypatch.setattr(orientacion, "_huellas_de", huellas_falsas)
+    monkeypatch.setattr(orientacion, "giro_probable", GIRO_PROBABLE)
+    monkeypatch.setattr(orientacion, "huella", HUELLA)
+    monkeypatch.setattr(orientacion, "referencias_genericas", lambda: np.zeros((0, 384), np.float32))
+    img = np.full((600, 600, 3), 0.8, np.float32)
+    derecha = _prenda_en_t()
+    img_d = np.where(derecha[..., None] > 0.5, 0.2, img).astype(np.float32)
+    return orientacion, [orientacion.huella(img_d, derecha).tolist()], img
+
+
+@pytest.mark.parametrize("k", [1, 2, 3])
+def test_orientacion_pone_derecha_la_prenda(orientacion_simulada, k):
+    orientacion, propias, fondo = orientacion_simulada
+    tumbada = np.ascontiguousarray(np.rot90(_prenda_en_t(), k))  # girada k cuartos antihorarios
+    img = np.where(tumbada[..., None] > 0.5, 0.2, fondo).astype(np.float32)
+    giro, margen = orientacion.giro_probable(img, tumbada, propias)
+    assert giro == k and margen > 0.01  # k cuartos horarios la devuelven a derechas
+
+
+def test_proyecto_gira_solo_una_vez_y_manda_el_giro_manual(tmp_path, monkeypatch, orientacion_simulada):
+    from editfoto.proyecto import Proyecto
+
+    _, propias, fondo = orientacion_simulada
+    monkeypatch.setattr(config, "CARPETA_PRESETS_USUARIO", tmp_path / "presets")
+    config.guardar_preset(config.fusionar(config.cargar_preset("generico"),
+                                          {"nombre": "camiseta", "orientacion": {"huellas": propias}}))
+    tumbada = np.ascontiguousarray(np.rot90(_prenda_en_t(), 1))  # hecha con el movil girado
+    img = np.where(tumbada[..., None] > 0.5, 0.2, fondo).astype(np.float32)
+    img[:, :300] *= 0.97  # para distinguir izquierda y derecha al comprobar el giro
+    entrada = tmp_path / "entrada"
+    (entrada / "camiseta").mkdir(parents=True)
+    imagen.guardar_jpg(img, entrada / "camiseta" / "a.jpg", 95)
+    monkeypatch.setattr("editfoto.segmentar.segmentar",
+                        lambda im, modelo="auto": (im.mean(axis=2) < 0.45).astype(np.float32))
+
+    p = Proyecto(entrada, tmp_path / "salida")
+    f = p.analizar("camiseta__a")
+    assert f.giro_auto == 1 and f.ajustes["giro90"] == 1
+    alfa = p._alfa(f, p.imagen_trabajo("camiseta__a"))
+    assert np.abs(alfa - (_prenda_en_t() > 0.5)).mean() < 0.02, "el recorte tiene que girar con la foto"
+
+    p.girar("camiseta__a", -1)  # tu decides que estaba bien como venia
+    p.analizar("camiseta__a", forzar=True)
+    assert p.foto("camiseta__a").ajustes["giro90"] == 0, "la app no debe volver a girarla"

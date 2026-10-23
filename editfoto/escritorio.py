@@ -251,6 +251,16 @@ def autoprueba(ruta_resultado: str | None) -> int:
         assert res.shape[:2] == (preset["lienzo"]["alto"], preset["lienzo"]["ancho"])
         info["render"] = f"ok ({datos.get('segundos', '-')})"
 
+        # Poner la prenda derecha: las referencias tienen que viajar dentro del exe.
+        from . import orientacion
+
+        refs = orientacion.referencias_genericas()
+        assert refs.shape[0] >= 40, "faltan las referencias de orientacion dentro del exe"
+        info["orientacion_refs"] = f"ok ({refs.shape[0]})"
+        if modelos._ruta_destino("dinov2").exists():
+            k, margen = orientacion.giro_probable(img, alfa)
+            info["orientacion"] = f"ok (DINOv2, giro {k}, margen {margen:.3f})"
+
         # Aprender el fondo usa funciones de OpenCV (alineacion ECC, relleno) que no usa el resto.
         from . import fondos
 

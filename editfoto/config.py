@@ -36,6 +36,9 @@ POR_DEFECTO: dict = {
     # Cuartos de vuelta (en sentido horario) que se aplican a las fotos nuevas de este preset.
     # Util si siempre disparas con el movil en horizontal y la prenda sale tumbada.
     "giro_inicial": 0,
+    # Poner la prenda derecha sola (cuello o cintura arriba) con un modelo de vision local.
+    # "huellas" las rellena "aprender" con tus ejemplos; sin ellas se usa una coleccion generica.
+    "orientacion": {"auto": True, "huellas": None},
     # tipo: "color" (fondo liso), "imagen" (tu fondo favorito) u "original" (se deja el fondo de la foto).
     "fondo": {"tipo": "color", "color": "#F4F4F2", "imagen": ""},
     # Sombra suave bajo la prenda para que no parezca pegada. Valores relativos al tamano de la prenda.

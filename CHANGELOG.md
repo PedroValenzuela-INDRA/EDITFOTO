@@ -3,6 +3,13 @@
 Cada entrada es lo que ves en "Novedades" al actualizarse la app. El formato de la
 cabecera es `## vX.Y.Z · AAAA-MM-DD · Titulo`.
 
+## v0.3.0 · 2026-10-23 · La prenda se pone derecha sola y sale con más vida
+
+- **La prenda se pone derecha sola**: aunque hagas la foto con el móvil girado o la prenda del revés, la app la gira para que el cuello (o la cintura) quede arriba. Lo decide un modelo de visión que corre en tu PC, comparando con tus ejemplos y con prendas fotografiadas derechas. Si duda, no la toca, y si la giras tú a mano, manda tu giro. La primera vez descarga 85 MB más.
+- **Más contraste y brillo de verdad**: al quitar las arrugas, la prenda ya no se queda gris y plana. Se suavizan las sombras suaves (las arrugas) y se respetan los negros, los pliegues hondos y el satinado del nylon.
+- **Fondo más limpio con un solo ejemplo**: donde estaba la prenda del ejemplo ya no queda una zona más clara, ni manchas, ni el contorno de su sombra, y la decoración (el vaquero de abajo) sale entera.
+- **La forma del ejemplo solo se aplica con la prenda derecha**: antes podía intentar adaptar una prenda tumbada.
+
 ## v0.2.0 · 2026-10-23 · EDITFOTO.exe: se instala y se actualiza solo
 
 - **Un solo programa, EDITFOTO.exe**, como INDRA HUB: no hace falta instalar Python ni nada mas. Cada vez que lo abres comprueba si hay una version nueva, la descarga y se reinicia solo.

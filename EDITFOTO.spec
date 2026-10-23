@@ -21,6 +21,7 @@ binaries = collect_dynamic_libs("onnxruntime") + collect_dynamic_libs("pillow_he
 datas = [
     ("editfoto/web", "editfoto/web"),  # la interfaz
     ("presets", "presets"),            # presets de fabrica (los tuyos van a Documentos\EDITFOTO)
+    ("editfoto/datos", "editfoto/datos"),  # referencias para poner la prenda derecha
     ("assets/editfoto.ico", "."),
 ]
 

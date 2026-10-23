@@ -66,7 +66,7 @@ Las respuestas son JSON salvo las rutas `/img/...`. Errores: codigo HTTP 4xx/5xx
 
 ### App de escritorio (EDITFOTO.exe)
 - `GET /api/estado` incluye ademas `app: "EDITFOTO"`, `exe: bool` (true dentro del .exe) y las rutas `entrada`, `salida`, `ejemplos`.
-- `GET /api/modelos` -> `{listos: bool, faltan: [nombres], activa: bool, modelo, descripcion, hecho, total, error}`. La primera vez la app descarga los modelos en segundo plano (hasta ~1,3 GB): mientras `listos` sea false, ensena el progreso (`hecho`/`total` en bytes). Se puede procesar en cuanto `faltan` no incluya `birefnet_lite`. Si `error` no es null, ensenalo.
+- `GET /api/modelos` -> `{listos: bool, faltan: [nombres], activa: bool, modelo, descripcion, hecho, total, error}`. La primera vez la app descarga los modelos en segundo plano (hasta ~1,4 GB): mientras `listos` sea false, ensena el progreso (`hecho`/`total` en bytes). Se puede procesar en cuanto `faltan` no incluya `birefnet_lite`. Si `error` no es null, ensenalo.
 - `GET /api/actualizacion` -> `{fase, version, progreso, mensaje, version_actual}`. `fase`: `inactivo`, `desarrollo`, `buscando`, `al_dia`, `detectada`, `descargando` (`progreso` 0-100), `esperando` (se instalara al acabar el lote), `instalando` (la app se reinicia sola en 2 s), `error` (`mensaje`; la app sigue funcionando).
 - `GET /api/novedades` -> `{version, notas}` (markdown) solo la primera vez tras actualizarse; si no, `{}`.
 - `POST /api/abrir_carpeta` body `{cual: "entrada" | "salida" | "ejemplos"}` -> abre esa carpeta en el Explorador -> `{ruta}`.
@@ -92,3 +92,9 @@ Las respuestas son JSON salvo las rutas `/img/...`. Errores: codigo HTTP 4xx/5xx
 - `giro_inicial` (0 a 3): cuartos de vuelta horarios que se aplican a las fotos NUEVAS de ese preset al aparecer en la carpeta de entrada (quedan en `ajustes.giro90`).
 - `encuadre.relleno_x`, `encuadre.relleno_y` (0.2 a 0.97 o null): la prenda cabe en una caja de ese ancho y alto (fracciones del lienzo) centrada en `centro_x`/`centro_y`. Con null se usa `encuadre.relleno` para las dos.
 - `forma = {contorno, fuerza}`: `contorno` es la silueta tipo de tus ejemplos (64 puntos normalizados, la rellena `aprender`; no se edita a mano) y `fuerza` (0 a 1, por defecto 0.7) cuanto se adapta la prenda a ella. Tras renderizar, `info.forma` dice si se ha adaptado ("adaptada al ejemplo (fuerza 0.70, parecido 0.93)") o por que no ("no aplicada: silueta muy distinta del ejemplo (0.29)", "no aplicada: la prenda tiene varias piezas"). Por foto: `ajustes.preset.forma.fuerza`.
+
+## Campos anadidos en v0.3.0
+
+- Preset `orientacion = {auto, huellas}`: con `auto` (por defecto true) la app pone la prenda derecha sola al analizar cada foto nueva. `huellas` son los resumenes DINOv2 (384 numeros) de tus ejemplos, los rellena `aprender`; sin ellas se usa la coleccion generica que viene con la app.
+- Objeto Foto: `giro_auto` = cuartos de vuelta horarios que la app aplico sola (0 si no giro nada, null si aun no se ha analizado). El giro queda sumado en `ajustes.giro90`, asi que el giro manual (`/girar`) y "Restablecer" funcionan igual. La app decide una sola vez por foto: si la giras a mano, no vuelve a girarla.
+- `GET /api/modelos`: la lista de modelos incluye `dinov2` (85 MB).

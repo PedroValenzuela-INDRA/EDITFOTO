@@ -1093,6 +1093,7 @@ function pintarInfo() {
   const info = f.info || {};
   const filas = [
     ['Preset', f.preset],
+    ['Puesta derecha', f.giro_auto ? `la app la giró ${f.giro_auto * 90}° sola` : (f.giro_auto === 0 ? 'no la ha girado' : '-')],
     ['Ángulo automático', info.angulo_auto != null ? num(info.angulo_auto, 1) + '°' : '-'],
     ['Ángulo aplicado', info.angulo != null ? num(info.angulo, 1) + '°' : '-'],
     ['Ampliación', info.escala != null ? num(info.escala, 2) + 'x' : '-'],

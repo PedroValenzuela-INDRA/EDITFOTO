@@ -14,7 +14,7 @@ La primera vez que lo abras, Windows puede mostrar "Windows protegió su PC". Es
 
 ## La primera vez
 
-La app descarga los modelos de IA que necesita: unos 400 MB, o unos 1,3 GB si tienes tarjeta gráfica (AMD, NVIDIA o Intel). Verás el progreso en pantalla. Mientras baja el modelo grande, puedes trabajar con el pequeño. Esta descarga necesita conexión.
+La app descarga los modelos de IA que necesita: unos 500 MB, o unos 1,4 GB si tienes tarjeta gráfica (AMD, NVIDIA o Intel). Verás el progreso en pantalla. Mientras baja el modelo grande, puedes trabajar con el pequeño. Esta descarga necesita conexión.
 
 ## Dónde están tus fotos
 

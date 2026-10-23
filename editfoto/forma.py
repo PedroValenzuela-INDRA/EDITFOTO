@@ -22,7 +22,7 @@ import numpy as np
 
 PUNTOS = 64
 ARMONICOS = 20       # detalle que se conserva de la silueta (menos = mas suave)
-DISTANCIA_MAXIMA = 0.12  # siluetas mas distintas que esto no se adaptan (p. ej. sudadera sobre pantalon)
+DISTANCIA_MAXIMA = 0.10  # siluetas mas distintas que esto no se adaptan (p. ej. sudadera sobre pantalon o prenda tumbada)
 
 
 def _cruz(a, b):

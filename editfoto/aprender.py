@@ -23,7 +23,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from . import config, fondos, forma, imagen, mascara, segmentar
+from . import config, fondos, forma, imagen, mascara, modelos, orientacion, segmentar
 
 _CALIBRADO_SOMBRA = 6.5
 LADO_EJEMPLOS = 1400
@@ -141,6 +141,15 @@ def aprender_fondo(ejemplos: list[Ejemplo], carpeta: Path, nombre: str, avisar=p
     return {"tipo": "imagen", "imagen": ruta, "color": color}, frase, dict(info, origen="un_ejemplo")
 
 
+def _huellas(ejemplos: list[Ejemplo]) -> list:
+    try:
+        hs = [orientacion.huella(e.img, e.prenda.astype(np.float32)) for e in ejemplos[:20]]
+    except Exception as e:  # sin el modelo se sigue aprendiendo todo lo demas
+        print(f"Aviso: no se ha podido aprender la orientacion: {modelos.texto_error(e)}", flush=True)
+        return []
+    return [np.round(h, 4).tolist() for h in hs if h is not None]
+
+
 def _preset_de(ejemplos: list[Ejemplo], nombre: str, base: str, descripcion: str, fondo: dict) -> tuple[dict, list[str]]:
     def med(clave):
         return float(np.median([e.medida[clave] for e in ejemplos]))
@@ -164,6 +173,9 @@ def _preset_de(ejemplos: list[Ejemplo], nombre: str, base: str, descripcion: str
     siluetas = [s for s in (forma.silueta(e.prenda) for e in ejemplos) if s is not None]
     if siluetas:  # la silueta tipo de tus ejemplos, para adaptar la forma de las prendas nuevas
         cambios["forma"] = {"contorno": np.round(forma.media_de_siluetas(siluetas), 4).tolist()}
+    huellas = _huellas(ejemplos)
+    if huellas:  # como es una prenda derecha de este tipo, para girar solas las fotos nuevas
+        cambios["orientacion"] = {"huellas": huellas}
     preset = config.fusionar(config.cargar_preset(base), cambios)
     config.guardar_preset(preset)
     texto = [

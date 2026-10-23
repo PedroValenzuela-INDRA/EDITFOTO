@@ -4,13 +4,14 @@ Editor de fotos de ropa para Vinted que funciona **entero en tu PC**, sin suscri
 
 ## Qué hace con cada foto
 
-1. **Recorta la prenda** con IA local (BiRefNet). Todo lo que no es prenda desaparece al poner el fondo nuevo: cables, trípode, enchufes, el suelo, la caja de los zapatos...
-2. **Iguala la exposición y el color** usando el fondo de tu set como referencia. El móvil cambia la exposición según la prenda (una negra sale lavada, una blanca sale gris); como el fondo del set siempre es el mismo, se corrige cada foto para que el fondo vuelva a su valor y todas quedan iguales.
-3. **Suaviza las arrugas** sin inventar nada: atenúa las sombras de tamaño medio (las arrugas) y deja intactas la textura del tejido, los estampados, los logos y los desperfectos.
-4. **Endereza** la prenda buscando su eje de simetría (solo si la prenda es simétrica y el giro es pequeño).
-5. **Encuadra** siempre igual: mismo tamaño de foto, misma proporción de prenda, centrada.
-6. **Pone tu fondo** (color liso o una imagen tuya) con una sombra suave para que no parezca pegada.
-7. **Guarda** en JPG sRGB **sin metadatos** (no se filtra la ubicación GPS del móvil).
+1. **Pone la prenda derecha** (cuello o cintura arriba) aunque hagas la foto con el móvil girado o la prenda del revés. Lo decide un modelo de visión local (DINOv2) comparando la prenda con tus ejemplos y con prendas fotografiadas derechas; en una prueba con 960 fotos reales de 8 tipos de prenda acertó el 98,8 %. Si duda, no la toca, y si la giras tú a mano, manda tu giro.
+2. **Recorta la prenda** con IA local (BiRefNet). Todo lo que no es prenda desaparece al poner el fondo nuevo: cables, trípode, enchufes, el suelo, la caja de los zapatos...
+3. **Iguala la exposición y el color** usando el fondo de tu set como referencia. El móvil cambia la exposición según la prenda (una negra sale lavada, una blanca sale gris); como el fondo del set siempre es el mismo, se corrige cada foto para que el fondo vuelva a su valor y todas quedan iguales.
+4. **Suaviza las arrugas** sin inventar nada: atenúa las sombras suaves de tamaño medio (las arrugas) y deja intactas la textura del tejido, el satinado del nylon, los pliegues hondos, los estampados, los logos y los desperfectos. Así la prenda no sale gris ni plana.
+5. **Endereza** la prenda buscando su eje de simetría (solo si la prenda es simétrica y el giro es pequeño).
+6. **Encuadra** siempre igual: mismo tamaño de foto, misma proporción de prenda, centrada.
+7. **Pone tu fondo** (color liso o una imagen tuya) con una sombra suave para que no parezca pegada.
+8. **Guarda** en JPG sRGB **sin metadatos** (no se filtra la ubicación GPS del móvil).
 
 Y para retocar a mano, cuatro pinceles:
 
@@ -32,7 +33,7 @@ Por eso aquí la IA solo hace dos cosas que no tocan la prenda: **recortar** y *
 La forma normal es descargar **EDITFOTO.exe** de la última versión publicada en [EDITFOTO-Releases](https://github.com/PedroValenzuela-INDRA/EDITFOTO-Releases/releases) y abrirlo con doble clic. No hace falta instalar Python.
 
 - **Aviso de Windows (SmartScreen)**: la primera vez, Windows puede mostrar "Windows protegió su PC". Pulsa **Más información** y después **Ejecutar de todas formas**. Como el programa no tiene firma digital, algún antivirus también puede marcarlo por error.
-- **Primera vez**: descarga los modelos de IA, unos 400 MB, o unos 1,3 GB si hay tarjeta gráfica (añade el modelo de recorte completo, más preciso). El progreso se ve en pantalla.
+- **Primera vez**: descarga los modelos de IA, unos 500 MB, o unos 1,4 GB si hay tarjeta gráfica (añade el modelo de recorte completo, más preciso). El progreso se ve en pantalla.
 - **Actualizaciones**: al abrirlo comprueba si hay una versión nueva, la descarga, se reinicia sola y enseña las novedades.
 - **Tus datos**: las fotos y los presets están en `Documentos\EDITFOTO`, y las actualizaciones no los tocan. Los modelos de IA y el registro de la app (`registro.txt`) están en `%LOCALAPPDATA%\EDITFOTO`.
 
@@ -112,7 +113,10 @@ Con CPU, 200 fotos tardan del orden de 30-40 minutos en segundo plano. Con una t
 | Recorte | BiRefNet (ONNX Runtime); limpieza de la máscara: se queda con la prenda, rellena agujeros pequeños y quita hilos finos que salen hasta el borde de la foto (cables, patas de trípode) | `segmentar.py`, `mascara.py` |
 | Bordes limpios | Estimación del color de primer plano (Forte y Pitié, 2021) para que no quede halo del fondo antiguo | `mascara.py` |
 | Color | Ganancias por canal en luz lineal para devolver el fondo del set a la mediana del lote; si el fondo es gris o blanco, además quita dominantes. Si una foto es de otro set, no se fuerza | `color.py` |
-| Arrugas | Separación de frecuencias de la luminosidad con filtro de dominio guiado por el color: textura fina intacta, sombras medias atenuadas, bordes de color (estampados, manchas) intactos | `arrugas.py` |
+| Orientación | DINOv2 small (ONNX): la prenda recortada en sus 4 giros se compara con tus ejemplos y con una colección genérica de prendas derechas; gana el giro más parecido si saca ventaja suficiente | `orientacion.py` |
+| Arrugas | Separación de frecuencias de la luminosidad con filtro de dominio guiado por el color: textura fina intacta, sombras medias suaves atenuadas, sombras fuertes (satinado, pliegues hondos) y bordes de color (estampados, manchas) intactos | `arrugas.py` |
+| Forma del ejemplo | Silueta tipo de tus ejemplos (Fourier) y deformación rígida por mínimos cuadrados móviles (Schaefer, 2006) de la foto real hacia ella | `forma.py` |
+| Fondo de un ejemplo | Se borra la prenda y su sombra respetando la decoración; la luz se ajusta con una superficie suave y el grano del suelo se sintetiza con sus propias estadísticas (spot noise, Galerne et al., 2011) | `fondos.py` |
 | Borrar objetos | LaMa (ONNX), por teselas para conservar resolución | `inpaint.py` |
 | Enderezado | Busca el giro que maximiza la simetría izquierda-derecha de la silueta | `composicion.py` |
 | Encuadre, fondo, sombra | Transformación afín única (giro + escala + posición), sombra difuminada de la silueta | `composicion.py` |
@@ -121,7 +125,7 @@ Hay un documento con la API del servidor local en [`docs/API.md`](docs/API.md).
 
 ## Limitaciones conocidas
 
-- **"Corregir la forma"** se limita a enderezar, centrar y escalar. Deformar la prenda (licuar) no se puede automatizar sin riesgo de falsearla.
+- **La forma** se adapta doblando la foto real hacia la de tus ejemplos, pero lo que no sale en tu foto no puede aparecer: si quieres el bajo doblado enseñando el forro, dóblalo al hacer la foto.
 - La **perspectiva** (foto tomada en diagonal) no se corrige: dispara con el móvil paralelo al suelo.
 - La **percha** se mantiene, porque el recorte la considera parte de la prenda. Si no la quieres, píntala con "No es prenda" (o cuelga sin percha).
 - Las arrugas muy marcadas (pliegues con sombra dura) se atenúan pero no desaparecen. Es deliberado: un pliegue duro se parece demasiado a una costura o a un defecto.
