@@ -43,6 +43,20 @@ POR_DEFECTO: dict = {
     "estilo": {"huellas": None},
     # Lo que la app va aprendiendo de las opciones que eliges (lo rellena "elegir").
     "aprendizaje": {"elecciones": 0, "historial": []},
+    # Retoque generativo (opcional, necesita ComfyUI abierto en este PC: docs/GENERATIVO.md).
+    "generativo": {
+        "servidor": "http://127.0.0.1:8188",
+        "zona": "bajo",
+        "opciones": 3,
+        "pasos": 4,
+        "cfg": 1.0,
+        "modelos": {
+            "unet": "qwen-image-edit-2511-Q4_K_M.gguf",
+            "clip": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+            "vae": "qwen_image_vae.safetensors",
+            "lora": "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+        },
+    },
     # tipo: "color" (fondo liso), "imagen" (tu fondo favorito) u "original" (se deja el fondo de la foto).
     "fondo": {"tipo": "color", "color": "#F4F4F2", "imagen": ""},
     # Sombra suave bajo la prenda para que no parezca pegada. Valores relativos al tamano de la prenda.

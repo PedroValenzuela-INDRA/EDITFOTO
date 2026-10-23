@@ -137,12 +137,18 @@ class Proyecto:
         """Cuartos de vuelta en sentido horario que el usuario ha girado la foto (0 a 3)."""
         return int(f.ajustes.get("giro90", 0)) % 4
 
+    def ruta_generada(self, id_: str) -> Path:
+        """Foto con el retoque generativo aplicado (sin girar), si lo has elegido."""
+        return self._dir(id_) / "generada.png"
+
     def _imagen(self, f: Foto, preset: dict) -> np.ndarray:
-        clave = (f.id, int(preset["salida"]["max_lado_trabajo"]), self.giro(f))
+        generada = self.ruta_generada(f.id)
+        version = generada.stat().st_mtime_ns if generada.exists() else 0
+        clave = (f.id, int(preset["salida"]["max_lado_trabajo"]), self.giro(f), version)
         if clave in self._cache:
             self._cache.move_to_end(clave)
             return self._cache[clave]
-        img = pipeline.cargar_trabajo(self.entrada / f.ruta, preset)
+        img = pipeline.cargar_trabajo(generada if version else self.entrada / f.ruta, preset)
         if self.giro(f):
             img = np.ascontiguousarray(np.rot90(img, -self.giro(f)))
         self._cache[clave] = img
@@ -279,6 +285,62 @@ class Proyecto:
                 f.ancho, f.alto = f.alto, f.ancho
             self._guardar_estado(f)
             return self.renderizar(id_)
+
+    # ---------- retoque generativo ----------
+
+    def generar(self, id_: str, zona: str, instruccion: str | None = None, avisar=None, cancelar=None) -> list[Path]:
+        """Pide a la IA generativa varias versiones de la zona y las deja preparadas para elegir."""
+        from . import generativo
+
+        with self.cerrojo:
+            f = self.foto(id_)
+            if not f.analizada:
+                self.analizar(id_)
+            preset = self.preset_de(f)
+            ajustes = preset["generativo"]
+            img = self._imagen(f, preset)
+            alfa = self._alfa(f, img)
+            m = preset["mascara"]
+            alfa, _ = mascara.limpiar(alfa, m["min_componente"], m["max_hueco"], m["quitar_cables"])
+            giro = self.giro(f)
+        # Fuera del cerrojo: tarda minutos y la app sigue funcionando mientras tanto.
+        cliente = generativo.buscar_servidor(ajustes["servidor"])
+        versiones = generativo.retocar(img, alfa, cliente, ajustes, zona, instruccion, avisar=avisar, cancelar=cancelar)
+        d = self._dir(id_)
+        for viejo in d.glob("generada_opcion_*"):
+            viejo.unlink()
+        rutas = []
+        for i, v in enumerate(versiones):
+            ruta = d / f"generada_opcion_{i}.png"
+            Image.fromarray(imagen.a_uint8(np.ascontiguousarray(np.rot90(v, giro)))).save(ruta)  # sin girar
+            imagen.miniatura(v, d / f"generada_opcion_{i}.jpg", 1200)
+            rutas.append(ruta)
+        return rutas
+
+    def opciones_generadas(self, id_: str) -> list[int]:
+        return sorted(int(p.stem.rsplit("_", 1)[1]) for p in self._dir(id_).glob("generada_opcion_*.png"))
+
+    def elegir_generada(self, id_: str, indice: int) -> Foto:
+        """Usa esa version como foto de partida: se vuelve a recortar y se edita como siempre."""
+        with self.cerrojo:
+            origen = self._dir(id_) / f"generada_opcion_{int(indice)}.png"
+            if not origen.exists():
+                raise ValueError("Esa version ya no existe: vuelve a generar")
+            origen.replace(self.ruta_generada(id_))
+            for viejo in self._dir(id_).glob("generada_opcion_*"):
+                viejo.unlink()
+            return self._rehacer_recorte(id_)
+
+    def quitar_generada(self, id_: str) -> Foto:
+        with self.cerrojo:
+            self.ruta_generada(id_).unlink(missing_ok=True)
+            return self._rehacer_recorte(id_)
+
+    def _rehacer_recorte(self, id_: str) -> Foto:
+        f = self.foto(id_)
+        (self._dir(id_) / "mini_original.jpg").unlink(missing_ok=True)
+        self.analizar(id_, forzar=True)  # la silueta ha cambiado (el bajo doblado...)
+        return self.renderizar(id_)
 
     def guardar_pincel(self, id_: str, tipo: str, png: bytes) -> Foto:
         if tipo not in TIPOS_PINCEL:

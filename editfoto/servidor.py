@@ -50,6 +50,7 @@ def crear_app(proyecto: Proyecto) -> FastAPI:
         datos = asdict(f)
         datos["pinceles"] = proyecto.pinceles(id_)
         datos["resultado"] = str(proyecto.ruta_resultado(f)) if f.estado == "lista" else None
+        datos["generada"] = proyecto.ruta_generada(id_).exists()
         return datos
 
     def buscar(id_: str):
@@ -234,6 +235,84 @@ def crear_app(proyecto: Proyecto) -> FastAPI:
         return {"elecciones": (p.get("aprendizaje") or {}).get("elecciones", 0),
                 "resumen": autoaprendizaje.resumen(p),
                 "favoritas": len(autoaprendizaje.listar_ejemplos().get(nombre, []))}
+
+    # ---------- retoque generativo (ComfyUI local, opcional) ----------
+
+    app.state.generando = {}
+
+    @app.get("/api/generativo")
+    def estado_generativo(preset: str = "generico"):
+        from . import generativo
+
+        ajustes = config.cargar_preset(preset)["generativo"]
+        try:
+            cliente = generativo.buscar_servidor(ajustes["servidor"])
+            return cliente.estado(ajustes["modelos"])
+        except generativo.ErrorGenerativo as e:
+            return {"conectado": False, "listo": False, "mensaje": str(e)}
+
+    @app.post("/api/fotos/{id_}/generativo")
+    def generar(id_: str, datos: dict = Body(default={})):
+        from . import generativo
+
+        buscar(id_)
+        estado = app.state.generando.get(id_)
+        if estado and estado["activo"]:
+            raise HTTPException(409, "Ya se esta generando esta foto")
+        zona = datos.get("zona") or proyecto.preset_de(proyecto.foto(id_))["generativo"]["zona"]
+        if zona not in generativo.INSTRUCCIONES:
+            raise HTTPException(400, f"Zona desconocida: {zona}")
+        estado = {"activo": True, "hechas": 0, "total": 0, "error": None, "opciones": [], "cancelar": threading.Event()}
+        app.state.generando[id_] = estado
+
+        def correr():
+            try:
+                proyecto.generar(id_, zona, datos.get("instruccion"),
+                                 avisar=lambda i, n: estado.update(hechas=i, total=n), cancelar=estado["cancelar"])
+                estado["opciones"] = proyecto.opciones_generadas(id_)
+                estado["hechas"] = estado["total"]
+            except Exception as e:  # noqa: BLE001 - se ensena en la interfaz
+                estado["error"] = str(e) if isinstance(e, generativo.ErrorGenerativo) else modelos.texto_error(e)
+            finally:
+                estado["activo"] = False
+
+        threading.Thread(target=correr, daemon=True).start()
+        return {"empezado": True}
+
+    @app.get("/api/fotos/{id_}/generativo")
+    def estado_generando(id_: str):
+        buscar(id_)
+        estado = app.state.generando.get(id_) or {"activo": False, "hechas": 0, "total": 0, "error": None}
+        datos = {k: v for k, v in estado.items() if k != "cancelar"}
+        datos["opciones"] = proyecto.opciones_generadas(id_)
+        return datos
+
+    @app.post("/api/fotos/{id_}/generativo/cancelar")
+    def cancelar_generando(id_: str):
+        estado = app.state.generando.get(id_)
+        if estado:
+            estado["cancelar"].set()
+        return {"ok": True}
+
+    @app.get("/img/{id_}/generada/{indice}")
+    def img_generada(id_: str, indice: int):
+        buscar(id_)
+        ruta = proyecto._dir(id_) / f"generada_opcion_{int(indice)}.jpg"
+        if not ruta.exists():
+            raise HTTPException(404, "No hay versiones generadas")
+        return FileResponse(ruta, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/fotos/{id_}/generativo/elegir")
+    def elegir_generada(id_: str, datos: dict = Body(...)):
+        buscar(id_)
+        proyecto.elegir_generada(id_, int(datos.get("indice", -1)))
+        return foto_json(id_)
+
+    @app.delete("/api/fotos/{id_}/generativo")
+    def quitar_generada(id_: str):
+        buscar(id_)
+        proyecto.quitar_generada(id_)
+        return foto_json(id_)
 
     # ---------- fotos ----------
 
