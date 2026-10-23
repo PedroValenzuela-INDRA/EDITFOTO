@@ -3,6 +3,14 @@
 Cada entrada es lo que ves en "Novedades" al actualizarse la app. El formato de la
 cabecera es `## vX.Y.Z · AAAA-MM-DD · Titulo`.
 
+## v0.4.0 · 2026-10-23 · Aprende de ti, bordes limpios y retoque generativo
+
+- **Bordes limpios en puños y bajos**: si fotografías sobre una alfombra de pelo, los pelos que tapan el borde de la prenda ya no se quedan pegados ni muerden los puños o el final de la cremallera. Se quitan y el hueco se tapa con la propia prenda, continuando su canalé. Con tarjeta gráfica, además, el borde se recorta otra vez por zonas con más detalle, y la esquina de un puño tapada por pelos vuelve a salir.
+- **Me gusta (tecla F) y Mis favoritas**: guarda las fotos que te gustan, o sube las tuyas, y la app aprende de ellas el fondo, el encuadre, la forma y tu estilo. Cuantas más, mejor.
+- **Ver opciones (tecla O)**: 4 versiones de la foto ordenadas por parecido con tus favoritas. La que eliges se aplica y las siguientes fotos de ese tipo de prenda se acercan a ella. En Mis favoritas ves lo que ha aprendido de tus elecciones.
+- **Retoque generativo (opcional)**: doblar el bajo enseñando el forro o abrir las mangas con una IA que corre en tu tarjeta gráfica (ComfyUI con Qwen-Image-Edit). Solo cambia la zona que eliges y te da varias versiones; revisa siempre lo generado. Necesita instalar ComfyUI y el modelo: sigue la guía docs/GENERATIVO.md.
+- **Menos memoria sin tarjeta gráfica**: el recorte en el procesador usa la mitad de memoria.
+
 ## v0.3.0 · 2026-10-23 · La prenda se pone derecha sola y sale con más vida
 
 - **La prenda se pone derecha sola**: aunque hagas la foto con el móvil girado o la prenda del revés, la app la gira para que el cuello (o la cintura) quede arriba. Lo decide un modelo de visión que corre en tu PC, comparando con tus ejemplos y con prendas fotografiadas derechas. Si duda, no la toca, y si la giras tú a mano, manda tu giro. La primera vez descarga 85 MB más.

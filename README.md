@@ -22,11 +22,21 @@ Y para retocar a mano, cuatro pinceles:
 | Es prenda | Si el recorte se ha comido un trozo (un cordón, un tirante) |
 | No es prenda | Percha, mano, pinza que el recorte ha tomado como prenda |
 
-## Por qué no hay un botón de "planchar con IA"
+## La IA generativa, solo si tú la pides
 
-Las IA generativas (Stable Diffusion, Flux...) pueden "planchar" una prenda, pero lo hacen **redibujándola**: cambian el tejido, los estampados, los logos y borran los desperfectos. En Vinted eso es un problema serio: la foto tiene que mostrar el artículo tal como es, y si el comprador recibe algo distinto puede abrir una reclamación.
+Las IA generativas pueden "planchar" o recolocar una prenda, pero lo hacen **redibujándola**: pueden cambiar el tejido, los estampados, los logos o borrar los desperfectos. En Vinted eso es un problema serio: la foto tiene que mostrar el artículo tal como es, y si el comprador recibe algo distinto puede abrir una reclamación.
 
-Por eso aquí la IA solo hace dos cosas que no tocan la prenda: **recortar** y **borrar lo que tú marques**. Todo lo demás son algoritmos deterministas que no pueden inventar detalles. Los desperfectos se ven tal cual están.
+Por eso el proceso normal no inventa nada: la IA solo **recorta**, **pone la prenda derecha** y **borra lo que tú marques**, y el resto son algoritmos que no pueden inventar detalles. Los desperfectos se ven tal cual están.
+
+Para lo que no se puede conseguir sin generar (doblar el bajo enseñando el forro, abrir las mangas) hay un **retoque generativo opcional**. Usa una IA de imagen que corre en tu tarjeta gráfica dentro de ComfyUI: Qwen-Image-Edit-2511, de licencia Apache 2.0, apta para vender. Solo cambia la zona que eliges, te da varias versiones y tú decides; fuera de esa zona la foto queda exacta. Revisa siempre lo generado. Instalación paso a paso: [`docs/GENERATIVO.md`](docs/GENERATIVO.md).
+
+## Que la app aprenda de ti
+
+- **Me gusta (tecla F)**: guarda la foto editada en tu banco de favoritas de ese tipo de prenda, y la app vuelve a aprender de todas: fondo, encuadre, forma, orientación y estilo.
+- **Mis favoritas**: aquí ves tu banco y puedes subir fotos que te gusten, hechas con la app o no. Cuantas más, mejor.
+- **Ver opciones (tecla O)**: prepara 4 versiones de la foto (más o menos forma del ejemplo, alisado, tamaño, contraste) ordenadas por parecido con tus favoritas. La que eliges se aplica a la foto, y los ajustes de ese tipo de prenda se mueven un poco hacia ella, así las siguientes ya salen más a tu gusto. En Mis favoritas verás lo que ha aprendido, por ejemplo "sueles preferir más forma del ejemplo (7 de 9 veces)".
+
+Aprende hacia dónde te gusta cada ajuste y a qué se parecen tus fotos favoritas; no entiende las fotos como una persona.
 
 ## Instalación (Windows)
 
@@ -163,8 +173,10 @@ Los tests usan fotos sintéticas con la respuesta conocida: una sudadera con tex
 |---|---|---|---|
 | BiRefNet lite / BiRefNet | Recorte | MIT | [onnx-community en HuggingFace](https://huggingface.co/onnx-community/BiRefNet_lite-ONNX) |
 | LaMa | Borrar objetos | Apache 2.0 | [Carve/LaMa-ONNX](https://huggingface.co/Carve/LaMa-ONNX) |
+| DINOv2 small | Poner la prenda derecha, parecido con tus favoritas | Apache 2.0 | [onnx-community/dinov2-small](https://huggingface.co/onnx-community/dinov2-small) |
+| Qwen-Image-Edit-2511 (opcional, en ComfyUI) | Retoque generativo | Apache 2.0 | [Qwen](https://huggingface.co/Qwen/Qwen-Image-Edit-2511) |
 
-Ambas licencias permiten el uso comercial. Los modelos se descargan la primera vez en `%LOCALAPPDATA%\EDITFOTO\modelos` (en la instalación para desarrollo, en `modelos/`).
+Todas estas licencias permiten el uso comercial. Los modelos se descargan la primera vez en `%LOCALAPPDATA%\EDITFOTO\modelos` (en la instalación para desarrollo, en `modelos/`).
 
 ## Publicar versiones
 
