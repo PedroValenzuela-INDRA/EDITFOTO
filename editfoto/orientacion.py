@@ -2,9 +2,10 @@
 
 Se usa DINOv2, un modelo de vision que corre en tu PC: se mira la prenda recortada en sus
 4 giros y se compara con prendas fotografiadas derechas (tus ejemplos y una coleccion
-generica que viene con la app). Gana el giro que mas se parece. En una prueba con 960 fotos
-reales de 8 tipos de prenda (camisetas, jerseis, chaquetas, pantalones, faldas...) acierta
-el 98,8 %. Si dos giros se parecen casi igual, no se arriesga: se deja como estaba.
+generica que viene con la app). Gana el giro que mas se parece. En una prueba con 96 fotos
+reales que no habia visto (clothing-dataset-small), cada una girada de las 4 formas (384
+casos de 8 tipos de prenda), acerto todas, y el mejor giro siempre ganaba por mas de 0,015.
+Si dos giros se parecen casi igual (menos de MARGEN_MINIMO), no se arriesga: se deja como estaba.
 """
 
 from __future__ import annotations

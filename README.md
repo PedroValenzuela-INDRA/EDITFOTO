@@ -4,7 +4,7 @@ Editor de fotos de ropa para Vinted que funciona **entero en tu PC**, sin suscri
 
 ## Qué hace con cada foto
 
-1. **Pone la prenda derecha** (cuello o cintura arriba) aunque hagas la foto con el móvil girado o la prenda del revés. Lo decide un modelo de visión local (DINOv2) comparando la prenda con tus ejemplos y con prendas fotografiadas derechas; en una prueba con 960 fotos reales de 8 tipos de prenda acertó el 98,8 %. Si duda, no la toca, y si la giras tú a mano, manda tu giro.
+1. **Pone la prenda derecha** (cuello o cintura arriba) aunque hagas la foto con el móvil girado o la prenda del revés. Lo decide un modelo de visión local (DINOv2) comparando la prenda con tus ejemplos y con prendas fotografiadas derechas; en una prueba con 96 fotos reales que no había visto, cada una girada de las 4 formas (384 casos, 8 tipos de prenda: camisetas, camisas, jerséis, chaquetas, pantalones, pantalones cortos, faldas y vestidos), acertó todas. Si duda, no la toca, y si la giras tú a mano, manda tu giro.
 2. **Recorta la prenda** con IA local (BiRefNet). Todo lo que no es prenda desaparece al poner el fondo nuevo: cables, trípode, enchufes, el suelo, la caja de los zapatos...
 3. **Iguala la exposición y el color** usando el fondo de tu set como referencia. El móvil cambia la exposición según la prenda (una negra sale lavada, una blanca sale gris); como el fondo del set siempre es el mismo, se corrige cada foto para que el fondo vuelva a su valor y todas quedan iguales.
 4. **Suaviza las arrugas** sin inventar nada: atenúa las sombras suaves de tamaño medio (las arrugas) y deja intactas la textura del tejido, el satinado del nylon, los pliegues hondos, los estampados, los logos y los desperfectos. Así la prenda no sale gris ni plana.
