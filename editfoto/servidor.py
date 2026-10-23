@@ -109,6 +109,18 @@ def crear_app(proyecto: Proyecto) -> FastAPI:
             raise HTTPException(500, f"No se ha podido abrir la carpeta ({e}). Esta en: {ruta}") from e
         return {"ruta": str(ruta)}
 
+    @app.post("/api/abrir_guia")
+    def abrir_guia(datos: dict = Body(...)):
+        guias = {"generativo": "https://github.com/PedroValenzuela-INDRA/EDITFOTO/blob/HEAD/docs/GENERATIVO.md"}
+        url = guias.get(datos.get("cual"))
+        if url is None:
+            raise HTTPException(400, "Guia desconocida")
+        import webbrowser
+
+        if not webbrowser.open(url):
+            raise HTTPException(500, f"No se ha podido abrir el navegador. La guia esta en: {url}")
+        return {"url": url}
+
     @app.post("/api/salir")
     def salir():
         if not app.state.salir:

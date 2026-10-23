@@ -2497,6 +2497,15 @@ function generativoFase(fase) {
   generativoPintarIA();
 }
 
+/** La guía de instalación de ComfyUI se abre en el navegador. */
+async function abrirGuiaGenerativo() {
+  try {
+    await api('POST', '/api/abrir_guia', { cual: 'generativo' });
+  } catch (e) {
+    /* api() ya ha avisado del error */
+  }
+}
+
 /** Pinta el estado de ComfyUI y activa o no el botón Generar. */
 function generativoPintarIA() {
   const ia = G.ia;
@@ -3548,6 +3557,7 @@ function enlazarEventos() {
   dlgOp.addEventListener('close', () => { if (O.abierta && !dlgOp.open) cerrarOpciones(); });
   $$('#gen-zonas .btn').forEach((b) => b.addEventListener('click', () => generativoZona(b.dataset.zona)));
   $('#gen-generar').addEventListener('click', generativoGenerar);
+  $('#gen-abrir-guia').addEventListener('click', abrirGuiaGenerativo);
   $('#gen-cancelar').addEventListener('click', cancelarGenerativo);
   $('#gen-cerrar').addEventListener('click', generativoEscape);
   $('#gen-comprobar').addEventListener('click', generativoComprobar);

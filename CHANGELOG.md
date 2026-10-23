@@ -3,6 +3,10 @@
 Cada entrada es lo que ves en "Novedades" al actualizarse la app. El formato de la
 cabecera es `## vX.Y.Z · AAAA-MM-DD · Titulo`.
 
+## v0.4.1 · 2026-10-23 · Guía del retoque generativo a un clic
+
+- En el retoque generativo (tecla G), el botón **Abrir la guía de instalación** abre en el navegador los pasos para instalar ComfyUI y el modelo en tu PC.
+
 ## v0.4.0 · 2026-10-23 · Aprende de ti, bordes limpios y retoque generativo
 
 - **Bordes limpios en puños y bajos**: si fotografías sobre una alfombra de pelo, los pelos que tapan el borde de la prenda ya no se quedan pegados ni muerden los puños o el final de la cremallera. Se quitan y el hueco se tapa con la propia prenda, continuando su canalé. Además, el borde se afina a resolución completa con una IA de matting (ViTMatte, 100 MB más la primera vez).

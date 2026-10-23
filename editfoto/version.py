@@ -10,7 +10,7 @@ COMO PUBLICAR UNA VERSION NUEVA
    PUBLICO de descargas. La app la instala sola la proxima vez que se abra.
 """
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 APP_NAME = "EDITFOTO"
 
